@@ -1,0 +1,42 @@
+// tsconfig.app.json (or app.json, renamed for clarity)
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    
+    /* ADDED: Required for Project References */
+    "composite": true, 
+    /* REMOVED: Cannot be true for Project References */
+    // "noEmit": true, 
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+   "jsx": "react-jsx",
+
+
+    
+    /* Must also emit declarations for the root project to use */
+    "declaration": true,
+    "emitDeclarationOnly": true,
+
+    /* Linting */
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitAny": false,
+    "noFallthroughCasesInSwitch": false,
+
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}
