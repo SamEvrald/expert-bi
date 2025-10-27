@@ -57,8 +57,8 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'datasets',
     timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
+    createdAt: 'created_at', // Map camelCase to snake_case
+    updatedAt: 'updated_at', // Map camelCase to snake_case
     underscored: false
   });
 

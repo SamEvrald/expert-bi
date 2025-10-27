@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ApiService, ApiResponse } from '@/lib/api';
+import { ApiService } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,10 +12,18 @@ import Navbar from './Navbar';
 type Dataset = {
   id: number;
   name?: string;
-  projectId?: number;
-  userId?: number;
-  status?: 'uploaded' | 'processing' | 'completed' | 'failed' | 'error';
-  errorMessage?: string;
+  description?: string;
+  originalFilename: string;
+  sizeBytes: number;
+  rowCount: number;
+  status: 'uploaded' | 'processing' | 'completed' | 'failed';
+  metadata?: {
+    headers?: string[];
+    preview?: Record<string, unknown>[];
+    analysis?: unknown;
+  };
+  createdAt: string;
+  updatedAt: string;
   [key: string]: unknown;
 };
 
@@ -48,12 +56,15 @@ const FileUpload: React.FC = () => {
     const maxAttempts = 30;
     let attempts = 0;
     while (attempts < maxAttempts) {
-      const dsResp = await ApiService.getDataset<Dataset>(datasetId);
+      const dsResp = await ApiService.getDataset(datasetId);
       const ds = dsResp?.data;
+      
       if (ds?.status === 'completed') return ds;
-      if (ds?.status === 'failed' || ds?.status === 'error') {
-        throw new Error(ds?.errorMessage || 'Analysis failed');
+      
+      if (ds?.status === 'failed') {
+        throw new Error('Dataset processing failed');
       }
+      
       attempts++;
       await new Promise((r) => setTimeout(r, 1000));
     }
@@ -73,14 +84,12 @@ const FileUpload: React.FC = () => {
     setFiles((prev) => [...prev, uiFile]);
 
     try {
-      // Remove project creation since datasets don't need project_id
       setFiles((prev) => prev.map(f => f.name === fileName ? { ...f, status: 'uploading', progress: 20 } : f));
 
       const formData = new FormData();
       formData.append('file', file);
-      // Remove projectId since it's not in your database schema
 
-      const uploadResp = await ApiService.uploadDataset<{ id: number }>(formData);
+      const uploadResp = await ApiService.uploadDataset(formData);
       const dataset = uploadResp?.data;
       if (!dataset?.id) {
         throw new Error('Upload failed: missing dataset id in response');
@@ -98,9 +107,15 @@ const FileUpload: React.FC = () => {
         description: `${fileName} processed successfully.`,
       });
 
-      // Navigate to analytics page with datasetId
+      // Fixed: Navigate to analytics page with datasetId in the URL path
       setTimeout(() => {
-        navigate('/analytics', { state: { datasetId: completed.id, fileName } });
+        navigate(`/analytics/${completed.id}`, { 
+          state: { 
+            datasetId: completed.id, 
+            fileName,
+            fromUpload: true 
+          } 
+        });
       }, 500);
 
       return completed;
@@ -157,10 +172,10 @@ const FileUpload: React.FC = () => {
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
-          <Card className="shadow-card">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5 text-accent" />
+                <Upload className="h-5 w-5" />
                 Upload Your Data
               </CardTitle>
               <CardDescription>
@@ -170,20 +185,20 @@ const FileUpload: React.FC = () => {
             <CardContent>
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200
-                  ${isDragging ? 'border-accent bg-accent/5' : 'border-border hover:border-accent/50 hover:bg-accent/5'}`}
+                  ${isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-primary/5'}`}
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
               >
                 <div className="space-y-4">
-                  <div className="p-4 bg-gradient-accent rounded-full w-fit mx-auto">
-                    <Upload className="h-8 w-8 text-accent-foreground" />
+                  <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto">
+                    <Upload className="h-8 w-8 text-primary" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold mb-2">Drop your CSV files here, or click to browse</h3>
                     <p className="text-muted-foreground">Supports CSV files up to 10MB. Multiple files allowed.</p>
                   </div>
-                  <Button variant="gradient" onClick={() => document.getElementById('file-input')?.click()}>
+                  <Button variant="default" onClick={() => document.getElementById('file-input')?.click()}>
                     Browse Files
                   </Button>
                   <input
@@ -200,7 +215,7 @@ const FileUpload: React.FC = () => {
           </Card>
 
           {files.length > 0 && (
-            <Card className="shadow-card">
+            <Card>
               <CardHeader>
                 <CardTitle>Uploaded Files</CardTitle>
                 <CardDescription>Track the progress of your file uploads and analysis</CardDescription>

@@ -104,11 +104,99 @@ export class ApiService {
     return this.request<T>('DELETE', path, undefined, opts);
   }
 
-  // convenience helpers (now generic)
-  static getProjects<T = unknown>() { return this.get<T>('/projects'); }
-  static getDatasets<T = unknown>() { return this.get<T>('/datasets'); }
-  static getDataset<T = unknown>(id: string | number) { return this.get<T>(`/datasets/${id}`); }
-  static getDatasetAnalysis<T = unknown>(datasetId: string | number) { return this.get<T>(`/datasets/${datasetId}/analysis`); }
-  static uploadDataset<T = unknown>(formData: FormData) { return this.post<T>('/datasets/upload', formData); }
-  static createProject<T = unknown>(payload: { name: string; description?: string }) { return this.post<T>('/projects', payload); }
+  // convenience helpers with proper typing
+  static getProjects() { 
+    return this.get<{ name: string; description?: string; id: number; status: string }[]>('/projects'); 
+  }
+  
+  static getDatasets() { 
+    return this.get<Array<{
+      id: number;
+      name: string;
+      description?: string;
+      originalFilename: string;
+      sizeBytes: number;
+      rowCount: number;
+      status: 'uploaded' | 'processing' | 'completed' | 'failed';
+      createdAt: string;
+      updatedAt: string;
+    }>>('/datasets'); 
+  }
+  
+  static getDataset(id: string | number) { 
+    return this.get<{
+      id: number;
+      name: string;
+      description?: string;
+      originalFilename: string;
+      sizeBytes: number;
+      rowCount: number;
+      status: 'uploaded' | 'processing' | 'completed' | 'failed';
+      metadata?: {
+        headers?: string[];
+        preview?: Array<Record<string, unknown>>;
+        analysis?: unknown;
+      };
+      createdAt: string;
+      updatedAt: string;
+    }>(`/datasets/${id}`); 
+  }
+  
+  static getDatasetAnalysis(datasetId: string | number) { 
+    return this.get<{
+      summary: {
+        totalRows: number;
+        totalColumns: number;
+        fileSize: number;
+        status: string;
+        dataQuality?: string;
+      };
+      columns: Array<{
+        name: string;
+        type: string;
+        nullCount?: number;
+        uniqueCount?: number;
+        sampleValues?: (string | number)[];
+        completeness?: number;
+      }>;
+      insights: Array<{
+        type: 'info' | 'success' | 'warning' | 'error';
+        title: string;
+        description: string;
+      }>;
+      chartData: {
+        rowDistribution: Array<{ name: string; value: number }>;
+        columnTypes?: Array<{ name: string; value: number }>;
+        dataQuality?: Array<{ name: string; completeness: number; missing: number }>;
+      };
+      preview: Array<Record<string, string | number | boolean | null>>;
+      dataQuality?: {
+        score: string;
+        completeness: number;
+        uniqueness: number;
+        missingValues: number;
+        duplicates: number;
+        totalCells: number;
+      };
+      statistics?: {
+        numerical: Record<string, {
+          mean: number;
+          median: number;
+          std: number;
+          min: number;
+          max: number;
+          count: number;
+        }>;
+        categorical: Record<string, Record<string, number>>;
+      };
+    }>(`/datasets/${datasetId}/analysis`); 
+  }
+  
+  static uploadDataset(formData: FormData) { 
+    return this.post<{ id: number }>('/datasets/upload', formData); 
+  }
+  
+  static createProject(payload: { name: string; description?: string }) { 
+    return this.post<{ id: number; name: string; description?: string }>('/projects', payload); 
+  }
 }

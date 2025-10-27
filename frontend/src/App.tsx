@@ -13,6 +13,7 @@ import Dashboard from "@/components/Dashboard";
 import FileUpload from "@/components/FileUpload";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import NotFound from "@/pages/NotFound";
+import { Navigate } from "react-router-dom";
 
 const queryClient = new QueryClient();
 
@@ -37,11 +38,8 @@ const App = () => (
                 <FileUpload />
               </ProtectedRoute>
             } />
-            <Route path="/analytics" element={
-              <ProtectedRoute>
-                <Analytics />
-              </ProtectedRoute>
-            } />
+            <Route path="/analytics/:id" element={<Analytics />} />
+            <Route path="/analytics" element={<Analytics />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
