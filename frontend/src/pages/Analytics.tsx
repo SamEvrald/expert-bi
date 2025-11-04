@@ -614,7 +614,7 @@ const Analytics = () => {
                   <CardContent>
                     <ChartContainer config={chartConfig} className="h-[400px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        {chartType === 'bar' && (
+                        {chartType === 'bar' ? (
                           <BarChart data={statisticalChartData} onClick={(data) => data?.activeLabel && handleChartClick(data, data.activeLabel)}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="name" />
@@ -630,8 +630,7 @@ const Analytics = () => {
                               <Bar dataKey={statisticView} fill="hsl(var(--chart-1))" name={statisticView.charAt(0).toUpperCase() + statisticView.slice(1)} />
                             )}
                           </BarChart>
-                        )}
-                        {chartType === 'line' && (
+                        ) : chartType === 'line' ? (
                           <LineChart data={statisticalChartData} onClick={(data) => data?.activeLabel && handleChartClick(data, data.activeLabel)}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="name" />
@@ -647,8 +646,7 @@ const Analytics = () => {
                               <Line type="monotone" dataKey={statisticView} stroke="hsl(var(--chart-1))" name={statisticView.charAt(0).toUpperCase() + statisticView.slice(1)} />
                             )}
                           </LineChart>
-                        )}
-                        {chartType === 'scatter' && (
+                        ) : (
                           <ScatterChart data={statisticalChartData} onClick={(data) => data?.activeLabel && handleChartClick(data, data.activeLabel)}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="mean" name="Mean" />
