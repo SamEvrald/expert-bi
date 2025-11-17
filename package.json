@@ -9,12 +9,14 @@
     "@mui/material": "^7.3.5",
     "@mui/x-data-grid": "^8.18.0",
     "aws-sdk": "^2.1692.0",
+    "bcrypt": "^6.0.0",
     "papaparse": "^5.5.3",
     "recharts": "^3.4.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.5",
+    "@types/multer": "^2.0.0",
     "@types/papaparse": "^5.3.16"
   }
 }

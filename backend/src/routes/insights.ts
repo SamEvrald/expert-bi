@@ -1,23 +1,19 @@
-import express from 'express';
+import { Router } from 'express';
 import { InsightsController } from '../controllers/InsightsController';
-import { authenticateToken } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth';
 
-const router = express.Router();
+const router = Router();
 
 // Generate insights
-router.post('/datasets/:datasetId/insights', authenticateToken, InsightsController.generateInsights);
+router.post('/datasets/:datasetId/insights', authMiddleware, InsightsController.generateInsights);
 
 // Get insights
-router.get('/datasets/:datasetId/insights', authenticateToken, InsightsController.getInsights);
+router.get('/datasets/:datasetId/insights', authMiddleware, InsightsController.getInsights);
 
-// Get insight status
-router.get('/datasets/:datasetId/insights/status', authenticateToken, InsightsController.getInsightStatus);
+// Get comprehensive analysis
+router.get('/datasets/:datasetId/analysis', authMiddleware, InsightsController.getComprehensiveAnalysis);
 
-// Get insights summary
-router.get('/datasets/:datasetId/insights/summary', authenticateToken, InsightsController.getInsightsSummary);
-
-// Get specific insight types
-router.get('/datasets/:datasetId/insights/correlations', authenticateToken, InsightsController.getCorrelations);
-router.get('/datasets/:datasetId/insights/trends', authenticateToken, InsightsController.getTrends);
+// Test Python connection
+router.get('/test-python', authMiddleware, InsightsController.testPythonConnection);
 
 export default router;
