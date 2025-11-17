@@ -1,11 +1,223 @@
 import { Request, Response } from 'express';
 import { DashboardGenerationService } from '../services/DashboardGenerationService';
 
+// Extend Express Request type to include user
+interface AuthRequest extends Request {
+  user?: {
+    id: number;
+    email: string;
+  };
+}
+
 export class DashboardController {
   /**
-   * Generate auto dashboard for dataset
+   * Create a new dashboard
    */
-  static async generateDashboard(req: Request, res: Response) {
+  static async createDashboard(req: AuthRequest, res: Response) {
+    try {
+      const { datasetId } = req.params;
+      const dashboardData = req.body;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const dashboard = await DashboardGenerationService.createDashboard(
+        parseInt(datasetId),
+        userId,
+        dashboardData
+      );
+
+      res.status(201).json({
+        success: true,
+        message: 'Dashboard created successfully',
+        data: dashboard
+      });
+    } catch (error) {
+      console.error('Create dashboard error:', error);
+      res.status(500).json({ 
+        error: 'Failed to create dashboard',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  /**
+   * Get all dashboards for a dataset
+   */
+  static async getDashboards(req: AuthRequest, res: Response) {
+    try {
+      const { datasetId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const dashboards = await DashboardGenerationService.getDashboards(
+        parseInt(datasetId),
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        data: dashboards
+      });
+    } catch (error) {
+      console.error('Get dashboards error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Get single dashboard by ID
+   */
+  static async getDashboard(req: AuthRequest, res: Response) {
+    try {
+      const { dashboardId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const dashboard = await DashboardGenerationService.getDashboardById(
+        parseInt(dashboardId),
+        userId
+      );
+
+      if (!dashboard) {
+        return res.status(404).json({ error: 'Dashboard not found' });
+      }
+
+      res.status(200).json({
+        success: true,
+        data: dashboard
+      });
+    } catch (error) {
+      console.error('Get dashboard error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Update dashboard
+   */
+  static async updateDashboard(req: AuthRequest, res: Response) {
+    try {
+      const { dashboardId } = req.params;
+      const updates = req.body;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const updatedDashboard = await DashboardGenerationService.updateDashboard(
+        parseInt(dashboardId),
+        userId,
+        updates
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Dashboard updated successfully',
+        data: updatedDashboard
+      });
+    } catch (error) {
+      console.error('Update dashboard error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Delete dashboard
+   */
+  static async deleteDashboard(req: AuthRequest, res: Response) {
+    try {
+      const { dashboardId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      await DashboardGenerationService.deleteDashboard(
+        parseInt(dashboardId),
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Dashboard deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete dashboard error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Get dataset columns
+   */
+  static async getDatasetColumns(req: AuthRequest, res: Response) {
+    try {
+      const { datasetId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const columns = await DashboardGenerationService.getDatasetColumns(
+        parseInt(datasetId),
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        data: { columns }
+      });
+    } catch (error) {
+      console.error('Get dataset columns error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Get chart data with filters
+   */
+  static async getChartData(req: AuthRequest, res: Response) {
+    try {
+      const { datasetId } = req.params;
+      const chartConfig = req.body;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const chartData = await DashboardGenerationService.getChartData(
+        parseInt(datasetId),
+        userId,
+        chartConfig
+      );
+
+      res.status(200).json({
+        success: true,
+        data: chartData
+      });
+    } catch (error) {
+      console.error('Get chart data error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Generate auto dashboard for dataset (legacy method - redirects to createDashboard)
+   */
+  static async generateDashboard(req: AuthRequest, res: Response) {
     try {
       const { datasetId } = req.params;
       const { dashboard_name } = req.body;
@@ -16,32 +228,38 @@ export class DashboardController {
       }
 
       // Check if dashboard already exists
-      const existingConfig = await DashboardGenerationService.getDashboardConfig(
-        parseInt(datasetId), 
+      const existingDashboards = await DashboardGenerationService.getDashboards(
+        parseInt(datasetId),
         userId
       );
 
-      if (existingConfig) {
+      if (existingDashboards.length > 0) {
         return res.status(200).json({
           success: true,
           message: 'Dashboard already exists',
-          data: existingConfig
+          data: existingDashboards[0]
         });
       }
 
-      // Generate dashboard
-      const dashboardConfig = await DashboardGenerationService.generateDashboard(
+      // Create new auto-generated dashboard
+      const dashboardData = {
+        name: dashboard_name || 'Auto-Generated Dashboard',
+        description: 'Automatically generated dashboard with AI-powered insights',
+        layout: [],
+        globalFilters: []
+      };
+
+      const dashboard = await DashboardGenerationService.createDashboard(
         parseInt(datasetId),
         userId,
-        dashboard_name
+        dashboardData
       );
 
       res.status(201).json({
         success: true,
         message: 'Dashboard generated successfully',
-        data: dashboardConfig
+        data: dashboard
       });
-
     } catch (error) {
       console.error('Generate dashboard error:', error);
       res.status(500).json({ 
@@ -52,107 +270,9 @@ export class DashboardController {
   }
 
   /**
-   * Get dashboard configuration
-   */
-  static async getDashboard(req: Request, res: Response) {
-    try {
-      const { datasetId } = req.params;
-      const userId = req.user?.id;
-
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const dashboardConfig = await DashboardGenerationService.getDashboardConfig(
-        parseInt(datasetId),
-        userId
-      );
-
-      if (!dashboardConfig) {
-        return res.status(404).json({ error: 'Dashboard not found' });
-      }
-
-      res.status(200).json({
-        success: true,
-        data: dashboardConfig
-      });
-
-    } catch (error) {
-      console.error('Get dashboard error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-
-  /**
-   * Get chart data
-   */
-  static async getChartData(req: Request, res: Response) {
-    try {
-      const { datasetId, chartId } = req.params;
-      const { filters } = req.body;
-      const userId = req.user?.id;
-
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const chartData = await DashboardGenerationService.getChartData(
-        parseInt(datasetId),
-        userId,
-        chartId,
-        filters
-      );
-
-      res.status(200).json({
-        success: true,
-        data: {
-          chart_id: chartId,
-          data: chartData,
-          timestamp: new Date().toISOString()
-        }
-      });
-
-    } catch (error) {
-      console.error('Get chart data error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-
-  /**
-   * Update dashboard configuration
-   */
-  static async updateDashboard(req: Request, res: Response) {
-    try {
-      const { datasetId } = req.params;
-      const updates = req.body;
-      const userId = req.user?.id;
-
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const updatedConfig = await DashboardGenerationService.updateDashboardConfig(
-        parseInt(datasetId),
-        userId,
-        updates
-      );
-
-      res.status(200).json({
-        success: true,
-        message: 'Dashboard updated successfully',
-        data: updatedConfig
-      });
-
-    } catch (error) {
-      console.error('Update dashboard error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-
-  /**
    * Get dashboard status
    */
-  static async getDashboardStatus(req: Request, res: Response) {
+  static async getDashboardStatus(req: AuthRequest, res: Response) {
     try {
       const { datasetId } = req.params;
       const userId = req.user?.id;
@@ -161,19 +281,21 @@ export class DashboardController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const status = await DashboardGenerationService.getDashboardStatus(
+      const dashboards = await DashboardGenerationService.getDashboards(
         parseInt(datasetId),
         userId
       );
+
+      const status = dashboards.length > 0 ? 'completed' : 'not_started';
 
       res.status(200).json({
         success: true,
         data: {
           dataset_id: parseInt(datasetId),
-          status
+          status,
+          dashboard_count: dashboards.length
         }
       });
-
     } catch (error) {
       console.error('Get dashboard status error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -183,7 +305,7 @@ export class DashboardController {
   /**
    * Get dashboard preview/summary
    */
-  static async getDashboardPreview(req: Request, res: Response) {
+  static async getDashboardPreview(req: AuthRequest, res: Response) {
     try {
       const { datasetId } = req.params;
       const userId = req.user?.id;
@@ -192,31 +314,33 @@ export class DashboardController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const dashboardConfig = await DashboardGenerationService.getDashboardConfig(
+      const dashboards = await DashboardGenerationService.getDashboards(
         parseInt(datasetId),
         userId
       );
 
-      if (!dashboardConfig) {
+      if (!dashboards || dashboards.length === 0) {
         return res.status(404).json({ error: 'Dashboard not found' });
       }
 
+      const dashboard = dashboards[0] as Record<string, unknown>;
+
       // Return summarized dashboard info
       const preview = {
-        id: dashboardConfig.id,
-        name: dashboardConfig.name,
-        description: dashboardConfig.description,
-        chart_count: dashboardConfig.charts.length,
-        chart_types: [...new Set(dashboardConfig.charts.map(chart => chart.type))],
-        key_insights: dashboardConfig.key_insights,
-        last_updated: dashboardConfig.created_at
+        id: dashboard.id,
+        name: dashboard.name,
+        description: dashboard.description,
+        chart_count: Array.isArray(dashboard.layout) ? dashboard.layout.length : 0,
+        chart_types: Array.isArray(dashboard.layout) 
+          ? [...new Set(dashboard.layout.map((chart: Record<string, unknown>) => chart.type))]
+          : [],
+        last_updated: dashboard.created_at
       };
 
       res.status(200).json({
         success: true,
         data: preview
       });
-
     } catch (error) {
       console.error('Get dashboard preview error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -226,7 +350,7 @@ export class DashboardController {
   /**
    * Regenerate dashboard
    */
-  static async regenerateDashboard(req: Request, res: Response) {
+  static async regenerateDashboard(req: AuthRequest, res: Response) {
     try {
       const { datasetId } = req.params;
       const { dashboard_name } = req.body;
@@ -236,19 +360,38 @@ export class DashboardController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      // Force regeneration by creating new dashboard
-      const dashboardConfig = await DashboardGenerationService.generateDashboard(
+      // Delete existing dashboards
+      const existingDashboards = await DashboardGenerationService.getDashboards(
+        parseInt(datasetId),
+        userId
+      );
+
+      for (const dashboard of existingDashboards) {
+        await DashboardGenerationService.deleteDashboard(
+          (dashboard as Record<string, unknown>).id as number,
+          userId
+        );
+      }
+
+      // Create new dashboard
+      const dashboardData = {
+        name: dashboard_name || 'Regenerated Dashboard',
+        description: 'Regenerated dashboard with updated insights',
+        layout: [],
+        globalFilters: []
+      };
+
+      const newDashboard = await DashboardGenerationService.createDashboard(
         parseInt(datasetId),
         userId,
-        dashboard_name
+        dashboardData
       );
 
       res.status(201).json({
         success: true,
         message: 'Dashboard regenerated successfully',
-        data: dashboardConfig
+        data: newDashboard
       });
-
     } catch (error) {
       console.error('Regenerate dashboard error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -258,32 +401,30 @@ export class DashboardController {
   /**
    * Export dashboard configuration
    */
-  static async exportDashboard(req: Request, res: Response) {
+  static async exportDashboard(req: AuthRequest, res: Response) {
     try {
-      const { datasetId } = req.params;
-      const { format } = req.query;
+      const { dashboardId } = req.params;
       const userId = req.user?.id;
 
       if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const dashboardConfig = await DashboardGenerationService.getDashboardConfig(
-        parseInt(datasetId),
+      const dashboard = await DashboardGenerationService.getDashboardById(
+        parseInt(dashboardId),
         userId
       );
 
-      if (!dashboardConfig) {
+      if (!dashboard) {
         return res.status(404).json({ error: 'Dashboard not found' });
       }
 
       // Set appropriate headers for download
-      const filename = `dashboard_${datasetId}_${Date.now()}.json`;
+      const filename = `dashboard_${dashboardId}_${Date.now()}.json`;
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-      res.status(200).json(dashboardConfig);
-
+      res.status(200).json(dashboard);
     } catch (error) {
       console.error('Export dashboard error:', error);
       res.status(500).json({ error: 'Internal server error' });

@@ -3,6 +3,14 @@ import { DataProfilingService } from '../services/DataProfilingService';
 import Database from '../config/database';
 import { S3StorageService } from '../services/S3StorageService';
 
+// Extend Express Request type to include user
+interface AuthRequest extends Request {
+  user?: {
+    id: number;
+    email: string;
+  };
+}
+
 interface ColumnMetadata {
   id: number;
   profile_id: number;
@@ -24,7 +32,7 @@ export class ProfilingController {
   /**
    * Profile uploaded dataset
    */
-  static async profileDataset(req: Request, res: Response) {
+  static async profileDataset(req: AuthRequest, res: Response) {
     try {
       const { datasetId } = req.params;
       const userId = req.user?.id;
@@ -125,7 +133,7 @@ export class ProfilingController {
   /**
    * Get profiling results
    */
-  static async getProfilingResults(req: Request, res: Response) {
+  static async getProfilingResults(req: AuthRequest, res: Response) {
     try {
       const { datasetId } = req.params;
       const userId = req.user?.id;
@@ -173,7 +181,7 @@ export class ProfilingController {
   /**
    * Get profiling status
    */
-  static async getProfilingStatus(req: Request, res: Response) {
+  static async getProfilingStatus(req: AuthRequest, res: Response) {
     try {
       const { datasetId } = req.params;
       const userId = req.user?.id;

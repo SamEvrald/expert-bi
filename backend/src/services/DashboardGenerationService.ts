@@ -1,474 +1,223 @@
-import Database from '../config/database';
-import { InsightGenerationService, InsightAnalysisResult } from './InsightGenerationService';
-import { SemanticAnalysisService } from './SemanticAnalysisService';
+import { Database } from '../config/database';
+import { S3StorageService } from './S3StorageService';
+import path from 'path';
+import fs from 'fs/promises';
+import { createReadStream } from 'fs';
+import csvParser from 'csv-parser';
 
-export interface ChartConfig {
-  id: string;
-  type: 'line' | 'bar' | 'pie' | 'scatter' | 'heatmap' | 'histogram' | 'box' | 'area' | 'treemap' | 'gauge';
-  title: string;
-  description?: string;
-  x_axis: string;
-  y_axis?: string;
-  color_by?: string;
-  filters?: ChartFilter[];
-  aggregation?: 'sum' | 'avg' | 'count' | 'min' | 'max';
-  sort_order?: 'asc' | 'desc';
-  limit?: number;
-  chart_options?: Record<string, any>;
-}
-
-export interface ChartFilter {
-  column: string;
-  operator: 'equals' | 'not_equals' | 'greater_than' | 'less_than' | 'contains' | 'in';
-  value: any;
-}
-
-export interface DashboardLayout {
-  grid_size: { cols: number; rows: number };
-  charts: {
-    chart_id: string;
-    position: { x: number; y: number; w: number; h: number };
-  }[];
-}
-
-export interface DashboardConfig {
-  id: string;
-  name: string;
-  description: string;
-  charts: ChartConfig[];
-  layout: DashboardLayout;
-  key_insights: string[];
-  filters: {
-    global_filters: ChartFilter[];
-    filter_groups: string[][];
-  };
-  refresh_interval?: number;
-  created_at: string;
+// Define the result type for INSERT queries
+interface InsertResult {
+  insertId: number;
+  affectedRows: number;
 }
 
 export class DashboardGenerationService {
   /**
-   * Generate dashboard configuration from dataset analysis
+   * Create a new dashboard
    */
-  static async generateDashboard(
+  static async createDashboard(
     datasetId: number,
     userId: number,
-    dashboardName?: string
-  ): Promise<DashboardConfig> {
+    dashboardData: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     try {
-      // Get dataset metadata
-      const datasetInfo = await this.getDatasetInfo(datasetId, userId);
-      
-      // Get insights
-      const insights = await InsightGenerationService.getStoredInsights(datasetId, userId);
-      if (!insights) {
-        throw new Error('No insights found. Generate insights first.');
-      }
-
-      // Get semantic analysis
-      const semanticResults = await SemanticAnalysisService.getSemanticResults(datasetId, userId);
-      
-      // Get column metadata
-      const columnMetadata = await this.getColumnMetadata(datasetId, userId);
-
-      // Generate charts based on insights and semantic types
-      const charts = await this.generateCharts(insights, semanticResults, columnMetadata);
-      
-      // Create dashboard layout
-      const layout = this.generateLayout(charts);
-      
-      // Extract key insights
-      const keyInsights = this.extractKeyInsights(insights);
-      
-      // Create dashboard config
-      const dashboardConfig: DashboardConfig = {
-        id: `dashboard_${datasetId}_${Date.now()}`,
-        name: dashboardName || `${datasetInfo.name} Dashboard`,
-        description: `Auto-generated dashboard for ${datasetInfo.name}`,
-        charts,
-        layout,
-        key_insights: keyInsights,
-        filters: this.generateGlobalFilters(semanticResults, columnMetadata),
-        refresh_interval: 300000, // 5 minutes
-        created_at: new Date().toISOString()
-      };
-
-      // Store dashboard configuration
-      await this.storeDashboardConfig(datasetId, userId, dashboardConfig);
-
-      return dashboardConfig;
-
-    } catch (error) {
-      console.error('Dashboard generation error:', error);
-      throw new Error(`Failed to generate dashboard: ${error}`);
-    }
-  }
-
-  /**
-   * Generate charts based on insights and semantic analysis
-   */
-  private static async generateCharts(
-    insights: InsightAnalysisResult,
-    semanticResults: any[],
-    columnMetadata: any[]
-  ): Promise<ChartConfig[]> {
-    const charts: ChartConfig[] = [];
-
-    // 1. Generate correlation charts
-    if (insights.correlations && insights.correlations.length > 0) {
-      for (const correlation of insights.correlations.slice(0, 3)) { // Top 3 correlations
-        charts.push({
-          id: `correlation_${correlation.x}_${correlation.y}`,
-          type: 'scatter',
-          title: `${correlation.x} vs ${correlation.y}`,
-          description: `${correlation.strength} ${correlation.direction} correlation (${correlation.correlation})`,
-          x_axis: correlation.x,
-          y_axis: correlation.y,
-          chart_options: {
-            showTrendLine: true,
-            correlationValue: correlation.correlation
-          }
-        });
-      }
-    }
-
-    // 2. Generate trend charts
-    if (insights.trends && insights.trends.length > 0) {
-      for (const trend of insights.trends.slice(0, 3)) { // Top 3 trends
-        charts.push({
-          id: `trend_${trend.date_column}_${trend.value_column}`,
-          type: 'line',
-          title: `${trend.value_column} Over Time`,
-          description: `${trend.direction} trend detected`,
-          x_axis: trend.date_column,
-          y_axis: trend.value_column,
-          chart_options: {
-            showTrend: true,
-            trendDirection: trend.direction
-          }
-        });
-      }
-    }
-
-    // 3. Generate semantic-based charts
-    const categoricalColumns = semanticResults.filter(col => 
-      ['category', 'personal_name', 'address'].includes(col.semantic_type)
-    );
-    
-    const numericalColumns = columnMetadata.filter(col => 
-      ['integer', 'float'].includes(col.data_type)
-    );
-
-    // Category distribution charts
-    for (const catCol of categoricalColumns.slice(0, 2)) {
-      charts.push({
-        id: `category_dist_${catCol.name}`,
-        type: 'pie',
-        title: `Distribution by ${catCol.name}`,
-        description: `Breakdown of records by ${catCol.name}`,
-        x_axis: catCol.name,
-        aggregation: 'count',
-        limit: 10
-      });
-    }
-
-    // Numerical distribution charts
-    for (const numCol of numericalColumns.slice(0, 2)) {
-      charts.push({
-        id: `numerical_dist_${numCol.column_name}`,
-        type: 'histogram',
-        title: `${numCol.column_name} Distribution`,
-        description: `Statistical distribution of ${numCol.column_name}`,
-        x_axis: numCol.column_name,
-        chart_options: {
-          bins: 20,
-          showStats: true
-        }
-      });
-    }
-
-    // 4. Generate currency/financial charts
-    const currencyColumns = semanticResults.filter(col => col.semantic_type === 'currency');
-    for (const currCol of currencyColumns.slice(0, 2)) {
-      if (categoricalColumns.length > 0) {
-        charts.push({
-          id: `currency_by_category_${currCol.name}`,
-          type: 'bar',
-          title: `${currCol.name} by ${categoricalColumns[0].name}`,
-          description: `${currCol.name} breakdown by category`,
-          x_axis: categoricalColumns[0].name,
-          y_axis: currCol.name,
-          aggregation: 'sum',
-          limit: 10,
-          sort_order: 'desc'
-        });
-      }
-    }
-
-    // 5. Generate geographic charts if coordinates exist
-    const coordinateColumns = semanticResults.filter(col => col.semantic_type === 'coordinates');
-    if (coordinateColumns.length >= 2) {
-      charts.push({
-        id: `geographic_scatter`,
-        type: 'scatter',
-        title: 'Geographic Distribution',
-        description: 'Location-based data visualization',
-        x_axis: coordinateColumns.find(col => col.name.toLowerCase().includes('lon'))?.name || coordinateColumns[0].name,
-        y_axis: coordinateColumns.find(col => col.name.toLowerCase().includes('lat'))?.name || coordinateColumns[1].name,
-        chart_options: {
-          isGeographic: true
-        }
-      });
-    }
-
-    // 6. Generate outlier analysis charts
-    if (insights.outliers && insights.outliers.length > 0) {
-      for (const outlier of insights.outliers.slice(0, 2)) {
-        charts.push({
-          id: `outlier_${outlier.column}`,
-          type: 'box',
-          title: `${outlier.column} Outlier Analysis`,
-          description: `Box plot showing outliers in ${outlier.column}`,
-          x_axis: outlier.column,
-          chart_options: {
-            showOutliers: true,
-            outlierCount: outlier.count
-          }
-        });
-      }
-    }
-
-    // 7. Generate feature importance charts
-    if (insights.feature_importance && insights.feature_importance.length > 0) {
-      const topFeatures = insights.feature_importance.slice(0, 5);
-      charts.push({
-        id: `feature_importance`,
-        type: 'bar',
-        title: 'Key Drivers Analysis',
-        description: 'Most important factors affecting outcomes',
-        x_axis: 'feature',
-        y_axis: 'importance',
-        chart_options: {
-          horizontal: true,
-          data: topFeatures
-        }
-      });
-    }
-
-    return charts;
-  }
-
-  /**
-   * Generate dashboard layout
-   */
-  private static generateLayout(charts: ChartConfig[]): DashboardLayout {
-    const layout: DashboardLayout = {
-      grid_size: { cols: 12, rows: Math.ceil(charts.length / 2) * 6 },
-      charts: []
-    };
-
-    let currentRow = 0;
-    let currentCol = 0;
-
-    for (let i = 0; i < charts.length; i++) {
-      const chart = charts[i];
-      
-      // Determine chart size based on type
-      let width = 6; // Default half width
-      let height = 6; // Default height
-      
-      switch (chart.type) {
-        case 'line':
-        case 'area':
-          width = 12; // Full width for time series
-          height = 6;
-          break;
-        case 'scatter':
-          width = 8;
-          height = 6;
-          break;
-        case 'pie':
-          width = 4;
-          height = 4;
-          break;
-        case 'histogram':
-        case 'box':
-          width = 6;
-          height = 5;
-          break;
-        case 'heatmap':
-          width = 8;
-          height = 6;
-          break;
-      }
-
-      // Adjust position if chart doesn't fit in current row
-      if (currentCol + width > 12) {
-        currentRow += 6;
-        currentCol = 0;
-      }
-
-      layout.charts.push({
-        chart_id: chart.id,
-        position: {
-          x: currentCol,
-          y: currentRow,
-          w: width,
-          h: height
-        }
-      });
-
-      currentCol += width;
-    }
-
-    return layout;
-  }
-
-  /**
-   * Extract key insights for dashboard summary
-   */
-  private static extractKeyInsights(insights: InsightAnalysisResult): string[] {
-    const keyInsights: string[] = [];
-
-    // Add summary
-    if (insights.summary) {
-      keyInsights.push(insights.summary);
-    }
-
-    // Add top 3 high-priority insights
-    const highPriorityInsights = insights.insights
-      .filter(insight => insight.priority === 'high')
-      .slice(0, 3);
-
-    keyInsights.push(...highPriorityInsights.map(insight => insight.title));
-
-    // Add correlation insights
-    if (insights.correlations && insights.correlations.length > 0) {
-      const strongestCorr = insights.correlations[0];
-      keyInsights.push(
-        `Strongest correlation: ${strongestCorr.x} and ${strongestCorr.y} (${strongestCorr.correlation})`
-      );
-    }
-
-    return keyInsights.slice(0, 5); // Limit to 5 key insights
-  }
-
-  /**
-   * Generate global filters for dashboard
-   */
-  private static generateGlobalFilters(semanticResults: any[], columnMetadata: any[]) {
-    const globalFilters: ChartFilter[] = [];
-    const filterGroups: string[][] = [];
-
-    // Add date range filters for date columns
-    const dateColumns = semanticResults.filter(col => col.semantic_type === 'date_time');
-    if (dateColumns.length > 0) {
-      filterGroups.push(['date_range']);
-    }
-
-    // Add categorical filters
-    const categoryColumns = semanticResults.filter(col => 
-      ['category', 'address'].includes(col.semantic_type)
-    );
-    
-    if (categoryColumns.length > 0) {
-      filterGroups.push(categoryColumns.map(col => col.name));
-    }
-
-    return {
-      global_filters: globalFilters,
-      filter_groups: filterGroups
-    };
-  }
-
-  /**
-   * Store dashboard configuration in database
-   */
-  private static async storeDashboardConfig(
-    datasetId: number,
-    userId: number,
-    dashboardConfig: DashboardConfig
-  ): Promise<void> {
-    try {
-      const insertQuery = `
-        INSERT INTO auto_dashboards 
-        (dataset_id, user_id, dashboard_name, dashboard_config, generation_status, created_at)
-        VALUES (?, ?, ?, ?, 'completed', NOW())
-        ON DUPLICATE KEY UPDATE
-        dashboard_config = VALUES(dashboard_config),
-        generation_status = 'completed',
-        updated_at = NOW()
+      const query = `
+        INSERT INTO dashboards (dataset_id, user_id, name, description, layout, global_filters, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())
       `;
 
-      await Database.query(insertQuery, [
+      const result = await Database.query(query, [
         datasetId,
         userId,
-        dashboardConfig.name,
-        JSON.stringify(dashboardConfig)
-      ]);
+        dashboardData.name || 'New Dashboard',
+        dashboardData.description || '',
+        JSON.stringify(dashboardData.layout || []),
+        JSON.stringify(dashboardData.globalFilters || [])
+      ]) as InsertResult;
 
+      return {
+        id: result.insertId,
+        ...dashboardData,
+        dataset_id: datasetId
+      };
     } catch (error) {
-      console.error('Error storing dashboard config:', error);
+      console.error('Error creating dashboard:', error);
       throw error;
     }
   }
 
   /**
-   * Get stored dashboard configuration
+   * Get all dashboards for dataset
    */
-  static async getDashboardConfig(datasetId: number, userId: number): Promise<DashboardConfig | null> {
+  static async getDashboards(datasetId: number, userId: number): Promise<unknown[]> {
     try {
       const query = `
-        SELECT dashboard_config 
-        FROM auto_dashboards 
-        WHERE dataset_id = ? AND user_id = ? AND generation_status = 'completed'
+        SELECT * FROM dashboards 
+        WHERE dataset_id = ? AND user_id = ?
+        ORDER BY created_at DESC
       `;
 
-      const result = await Database.query(query, [datasetId, userId]);
+      const dashboards = await Database.query(query, [datasetId, userId]) as Record<string, unknown>[];
+
+      return dashboards.map((d: Record<string, unknown>) => ({
+        ...d,
+        layout: typeof d.layout === 'string' ? JSON.parse(d.layout as string) : d.layout,
+        global_filters: typeof d.global_filters === 'string' ? JSON.parse(d.global_filters as string) : d.global_filters
+      }));
+    } catch (error) {
+      console.error('Error getting dashboards:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get dashboard by ID
+   */
+  static async getDashboardById(dashboardId: number, userId: number): Promise<Record<string, unknown> | null> {
+    try {
+      const query = 'SELECT * FROM dashboards WHERE id = ? AND user_id = ?';
+      const result = await Database.query(query, [dashboardId, userId]) as Record<string, unknown>[];
 
       if (!result || result.length === 0) {
         return null;
       }
 
-      return JSON.parse(result[0].dashboard_config);
-
+      const dashboard = result[0];
+      return {
+        ...dashboard,
+        layout: typeof dashboard.layout === 'string' ? JSON.parse(dashboard.layout as string) : dashboard.layout,
+        global_filters: typeof dashboard.global_filters === 'string' ? JSON.parse(dashboard.global_filters as string) : dashboard.global_filters
+      };
     } catch (error) {
-      console.error('Error getting dashboard config:', error);
+      console.error('Error getting dashboard by ID:', error);
       throw error;
     }
   }
 
   /**
-   * Get chart data for a specific chart
+   * Update dashboard
+   */
+  static async updateDashboard(
+    dashboardId: number,
+    userId: number,
+    updates: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    try {
+      const query = `
+        UPDATE dashboards 
+        SET name = ?, description = ?, layout = ?, global_filters = ?, updated_at = NOW()
+        WHERE id = ? AND user_id = ?
+      `;
+
+      await Database.query(query, [
+        updates.name || 'Updated Dashboard',
+        updates.description || '',
+        JSON.stringify(updates.layout || []),
+        JSON.stringify(updates.globalFilters || []),
+        dashboardId,
+        userId
+      ]);
+
+      const updatedDashboard = await this.getDashboardById(dashboardId, userId);
+      
+      if (!updatedDashboard) {
+        throw new Error('Dashboard not found after update');
+      }
+
+      return updatedDashboard;
+    } catch (error) {
+      console.error('Error updating dashboard:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete dashboard
+   */
+  static async deleteDashboard(dashboardId: number, userId: number): Promise<void> {
+    try {
+      const query = 'DELETE FROM dashboards WHERE id = ? AND user_id = ?';
+      await Database.query(query, [dashboardId, userId]);
+    } catch (error) {
+      console.error('Error deleting dashboard:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get dataset columns for configuration
+   */
+  static async getDatasetColumns(datasetId: number, userId: number): Promise<string[]> {
+    try {
+      const query = 'SELECT file_path, s3_key FROM datasets WHERE id = ? AND user_id = ?';
+      const dataset = await Database.query(query, [datasetId, userId]) as Record<string, unknown>[];
+
+      if (!dataset || dataset.length === 0) {
+        throw new Error('Dataset not found');
+      }
+
+      const { file_path, s3_key } = dataset[0];
+      let filePath = file_path as string;
+
+      if (s3_key) {
+        const buffer = await S3StorageService.downloadFile(s3_key as string);
+        const tempDir = path.join(__dirname, '../../temp');
+        
+        // Ensure temp directory exists
+        await fs.mkdir(tempDir, { recursive: true });
+        
+        const tempFile = path.join(tempDir, `temp_${Date.now()}.csv`);
+        await fs.writeFile(tempFile, buffer);
+        filePath = tempFile;
+      }
+
+      return new Promise((resolve, reject) => {
+        createReadStream(filePath)
+          .pipe(csvParser())
+          .on('headers', (headers: string[]) => {
+            resolve(headers);
+          })
+          .on('error', reject);
+      });
+    } catch (error) {
+      console.error('Error getting dataset columns:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get chart data with filters
    */
   static async getChartData(
     datasetId: number,
     userId: number,
-    chartId: string,
-    filters?: ChartFilter[]
-  ): Promise<any[]> {
+    chartConfig: { chart_type: string; config: Record<string, unknown>; filters: Record<string, unknown>[] }
+  ): Promise<Record<string, unknown>> {
     try {
-      // Get dashboard config to find chart configuration
-      const dashboardConfig = await this.getDashboardConfig(datasetId, userId);
-      if (!dashboardConfig) {
-        throw new Error('Dashboard configuration not found');
+      const query = 'SELECT file_path, s3_key FROM datasets WHERE id = ? AND user_id = ?';
+      const dataset = await Database.query(query, [datasetId, userId]) as Record<string, unknown>[];
+
+      if (!dataset || dataset.length === 0) {
+        throw new Error('Dataset not found');
       }
 
-      const chartConfig = dashboardConfig.charts.find(chart => chart.id === chartId);
-      if (!chartConfig) {
-        throw new Error('Chart configuration not found');
+      const { file_path, s3_key } = dataset[0];
+      let filePath = file_path as string;
+
+      if (s3_key) {
+        const buffer = await S3StorageService.downloadFile(s3_key as string);
+        const tempDir = path.join(__dirname, '../../temp');
+        
+        // Ensure temp directory exists
+        await fs.mkdir(tempDir, { recursive: true });
+        
+        const tempFile = path.join(tempDir, `temp_${Date.now()}.csv`);
+        await fs.writeFile(tempFile, buffer);
+        filePath = tempFile;
       }
 
-      // Get dataset file path
-      const datasetInfo = await this.getDatasetInfo(datasetId, userId);
-      
-      // Generate SQL query based on chart configuration
-      const sqlQuery = this.generateChartQuery(chartConfig, filters);
-      
-      // For now, return mock data structure
-      // In a real implementation, you would execute the query against your data source
-      return await this.executeChartQuery(datasetInfo.file_path, sqlQuery, chartConfig);
-
+      const chartData = await this.processChartData(filePath, chartConfig);
+      return chartData;
     } catch (error) {
       console.error('Error getting chart data:', error);
       throw error;
@@ -476,193 +225,124 @@ export class DashboardGenerationService {
   }
 
   /**
-   * Generate SQL query for chart data
+   * Process chart data based on configuration
    */
-  private static generateChartQuery(chartConfig: ChartConfig, filters?: ChartFilter[]): string {
-    let query = 'SELECT ';
-    
-    // Build SELECT clause
-    if (chartConfig.y_axis) {
-      const aggregation = chartConfig.aggregation || 'sum';
-      query += `${chartConfig.x_axis}, ${aggregation.toUpperCase()}(${chartConfig.y_axis}) as value `;
-    } else {
-      query += `${chartConfig.x_axis}, COUNT(*) as value `;
+  private static async processChartData(
+    filePath: string,
+    chartConfig: { chart_type: string; config: Record<string, unknown>; filters: Record<string, unknown>[] }
+  ): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const data: Record<string, unknown>[] = [];
+
+      createReadStream(filePath)
+        .pipe(csvParser())
+        .on('data', (row: Record<string, unknown>) => {
+          let include = true;
+          for (const filter of chartConfig.filters || []) {
+            const value = row[filter.column as string];
+            
+            switch (filter.operator) {
+              case 'equals':
+                if (value !== filter.value) include = false;
+                break;
+              case 'not_equals':
+                if (value === filter.value) include = false;
+                break;
+              case 'contains':
+                if (typeof value === 'string' && typeof filter.value === 'string') {
+                  if (!value.includes(filter.value)) include = false;
+                }
+                break;
+              case 'greater_than':
+                if (parseFloat(value as string) <= parseFloat(filter.value as string)) include = false;
+                break;
+              case 'less_than':
+                if (parseFloat(value as string) >= parseFloat(filter.value as string)) include = false;
+                break;
+            }
+          }
+
+          if (include) {
+            data.push(row);
+          }
+        })
+        .on('end', () => {
+          const processed = this.aggregateChartData(data, chartConfig.config);
+          resolve({ chart_data: processed });
+        })
+        .on('error', reject);
+    });
+  }
+
+  /**
+   * Aggregate chart data
+   */
+  private static aggregateChartData(data: Record<string, unknown>[], config: Record<string, unknown>): Record<string, unknown>[] {
+    const { x_axis, y_axis, aggregation, group_by, sort_order, limit } = config;
+
+    if (!x_axis || !y_axis) {
+      return [];
     }
 
-    query += 'FROM dataset ';
+    const grouped = new Map<string, number[]>();
 
-    // Build WHERE clause
-    const whereConditions: string[] = [];
-    
-    if (filters) {
-      for (const filter of filters) {
-        whereConditions.push(this.buildFilterCondition(filter));
+    for (const row of data) {
+      const key = group_by ? `${row[x_axis as string]}-${row[group_by as string]}` : row[x_axis as string] as string;
+      const value = parseFloat(row[y_axis as string] as string) || 0;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
       }
+      grouped.get(key)!.push(value);
     }
 
-    if (whereConditions.length > 0) {
-      query += 'WHERE ' + whereConditions.join(' AND ') + ' ';
-    }
+    const result: Record<string, unknown>[] = [];
+    for (const [key, values] of grouped.entries()) {
+      let aggValue: number;
 
-    // Build GROUP BY clause
-    if (chartConfig.type !== 'histogram') {
-      query += `GROUP BY ${chartConfig.x_axis} `;
-    }
-
-    // Build ORDER BY clause
-    if (chartConfig.sort_order) {
-      query += `ORDER BY value ${chartConfig.sort_order.toUpperCase()} `;
-    }
-
-    // Build LIMIT clause
-    if (chartConfig.limit) {
-      query += `LIMIT ${chartConfig.limit} `;
-    }
-
-    return query;
-  }
-
-  /**
-   * Build filter condition for SQL
-   */
-  private static buildFilterCondition(filter: ChartFilter): string {
-    switch (filter.operator) {
-      case 'equals':
-        return `${filter.column} = '${filter.value}'`;
-      case 'not_equals':
-        return `${filter.column} != '${filter.value}'`;
-      case 'greater_than':
-        return `${filter.column} > ${filter.value}`;
-      case 'less_than':
-        return `${filter.column} < ${filter.value}`;
-      case 'contains':
-        return `${filter.column} LIKE '%${filter.value}%'`;
-      case 'in':
-        const values = Array.isArray(filter.value) ? filter.value : [filter.value];
-        return `${filter.column} IN ('${values.join("','")}')`;
-      default:
-        return '1=1';
-    }
-  }
-
-  /**
-   * Execute chart query (mock implementation)
-   */
-  private static async executeChartQuery(
-    filePath: string, 
-    query: string, 
-    chartConfig: ChartConfig
-  ): Promise<any[]> {
-    // This is a simplified mock implementation
-    // In a real scenario, you would use a proper SQL engine or data processing library
-    
-    // Return mock data based on chart type
-    switch (chartConfig.type) {
-      case 'pie':
-        return [
-          { label: 'Category A', value: 30 },
-          { label: 'Category B', value: 45 },
-          { label: 'Category C', value: 25 }
-        ];
-      
-      case 'line':
-        return Array.from({ length: 12 }, (_, i) => ({
-          x: `2024-${String(i + 1).padStart(2, '0')}`,
-          y: Math.floor(Math.random() * 1000) + 500
-        }));
-      
-      case 'bar':
-        return [
-          { x: 'Product A', y: 1200 },
-          { x: 'Product B', y: 800 },
-          { x: 'Product C', y: 1500 },
-          { x: 'Product D', y: 600 }
-        ];
-      
-      case 'scatter':
-        return Array.from({ length: 50 }, () => ({
-          x: Math.random() * 100,
-          y: Math.random() * 100
-        }));
-      
-      default:
-        return [];
-    }
-  }
-
-  /**
-   * Helper methods
-   */
-  private static async getDatasetInfo(datasetId: number, userId: number): Promise<any> {
-    const query = 'SELECT * FROM datasets WHERE id = ? AND user_id = ?';
-    const result = await Database.query(query, [datasetId, userId]);
-    
-    if (!result || result.length === 0) {
-      throw new Error('Dataset not found');
-    }
-    
-    return result[0];
-  }
-
-  private static async getColumnMetadata(datasetId: number, userId: number): Promise<any[]> {
-    const query = `
-      SELECT cm.*
-      FROM data_profiles dp
-      JOIN column_metadata cm ON dp.id = cm.profile_id
-      WHERE dp.dataset_id = ? AND dp.user_id = ?
-    `;
-    
-    return await Database.query(query, [datasetId, userId]);
-  }
-
-  /**
-   * Update dashboard configuration
-   */
-  static async updateDashboardConfig(
-    datasetId: number,
-    userId: number,
-    updates: Partial<DashboardConfig>
-  ): Promise<DashboardConfig> {
-    try {
-      const currentConfig = await this.getDashboardConfig(datasetId, userId);
-      if (!currentConfig) {
-        throw new Error('Dashboard configuration not found');
+      switch (aggregation) {
+        case 'sum':
+          aggValue = values.reduce((sum, v) => sum + v, 0);
+          break;
+        case 'avg':
+          aggValue = values.reduce((sum, v) => sum + v, 0) / values.length;
+          break;
+        case 'count':
+          aggValue = values.length;
+          break;
+        case 'min':
+          aggValue = Math.min(...values);
+          break;
+        case 'max':
+          aggValue = Math.max(...values);
+          break;
+        case 'median':
+          const sorted = [...values].sort((a, b) => a - b);
+          const mid = Math.floor(sorted.length / 2);
+          aggValue = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+          break;
+        default:
+          aggValue = values[0];
       }
 
-      const updatedConfig = { ...currentConfig, ...updates };
-      
-      await this.storeDashboardConfig(datasetId, userId, updatedConfig);
-      
-      return updatedConfig;
-
-    } catch (error) {
-      console.error('Error updating dashboard config:', error);
-      throw error;
+      const [xValue, groupValue] = key.split('-');
+      result.push({
+        [x_axis as string]: xValue,
+        [y_axis as string]: Math.round(aggValue * 100) / 100,
+        ...(group_by && groupValue ? { [group_by as string]: groupValue } : {})
+      });
     }
-  }
 
-  /**
-   * Generate dashboard status
-   */
-  static async getDashboardStatus(datasetId: number, userId: number): Promise<string> {
-    try {
-      const query = `
-        SELECT generation_status 
-        FROM auto_dashboards 
-        WHERE dataset_id = ? AND user_id = ?
-      `;
-      
-      const result = await Database.query(query, [datasetId, userId]);
-      
-      if (!result || result.length === 0) {
-        return 'not_generated';
-      }
-      
-      return result[0].generation_status;
-
-    } catch (error) {
-      console.error('Error getting dashboard status:', error);
-      return 'error';
+    if (sort_order === 'asc') {
+      result.sort((a, b) => (a[y_axis as string] as number) - (b[y_axis as string] as number));
+    } else if (sort_order === 'desc') {
+      result.sort((a, b) => (b[y_axis as string] as number) - (a[y_axis as string] as number));
     }
+
+    if (limit && (limit as number) > 0) {
+      return result.slice(0, limit as number);
+    }
+
+    return result;
   }
 }

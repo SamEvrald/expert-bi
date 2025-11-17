@@ -1,52 +1,55 @@
-import { apiClient } from './apiClient';
+import api from './api';
 
-export interface DashboardResponse {
-  success: boolean;
-  data: any;
-  message?: string;
+interface DashboardData {
+  name: string;
+  description: string;
+  layout: unknown[];
+  globalFilters: unknown[];
+  dataset_id?: number;
 }
 
-class DashboardService {
-  async generateDashboard(datasetId: string, dashboardName?: string): Promise<DashboardResponse> {
-    const response = await apiClient.post(`/dashboard/datasets/${datasetId}/dashboard`, {
-      dashboard_name: dashboardName
-    });
-    return response.data;
-  }
-
-  async getDashboard(datasetId: string): Promise<DashboardResponse> {
-    const response = await apiClient.get(`/dashboard/datasets/${datasetId}/dashboard`);
-    return response.data;
-  }
-
-  async getDashboardStatus(datasetId: string): Promise<DashboardResponse> {
-    const response = await apiClient.get(`/dashboard/datasets/${datasetId}/dashboard/status`);
-    return response.data;
-  }
-
-  async getChartData(datasetId: string, chartId: string, filters?: any[]): Promise<DashboardResponse> {
-    const response = await apiClient.post(`/dashboard/datasets/${datasetId}/dashboard/charts/${chartId}/data`, {
-      filters: filters || []
-    });
-    return response.data;
-  }
-
-  async updateDashboard(datasetId: string, updates: any): Promise<DashboardResponse> {
-    const response = await apiClient.put(`/dashboard/datasets/${datasetId}/dashboard`, updates);
-    return response.data;
-  }
-
-  async regenerateDashboard(datasetId: string): Promise<DashboardResponse> {
-    const response = await apiClient.post(`/dashboard/datasets/${datasetId}/dashboard/regenerate`);
-    return response.data;
-  }
-
-  async exportDashboard(datasetId: string): Promise<Blob> {
-    const response = await apiClient.get(`/dashboard/datasets/${datasetId}/dashboard/export`, {
-      responseType: 'blob'
-    });
-    return response.data;
-  }
+interface ChartConfig {
+  chart_type: string;
+  config: Record<string, unknown>;
+  filters: unknown[];
 }
 
-export const dashboardService = new DashboardService();
+export const dashboardService = {
+  async createDashboard(dashboardData: DashboardData) {
+    const response = await api.post(
+      `/datasets/${dashboardData.dataset_id}/dashboards`,
+      dashboardData
+    );
+    return response.data;
+  },
+
+  async getDashboards(datasetId: string) {
+    const response = await api.get(`/datasets/${datasetId}/dashboards`);
+    return response.data;
+  },
+
+  async getDashboard(dashboardId: string) {
+    const response = await api.get(`/dashboards/${dashboardId}`);
+    return response.data;
+  },
+
+  async updateDashboard(dashboardId: string, updates: DashboardData) {
+    const response = await api.put(`/dashboards/${dashboardId}`, updates);
+    return response.data;
+  },
+
+  async deleteDashboard(dashboardId: string) {
+    const response = await api.delete(`/dashboards/${dashboardId}`);
+    return response.data;
+  },
+
+  async getDatasetColumns(datasetId: string) {
+    const response = await api.get(`/datasets/${datasetId}/columns`);
+    return response.data;
+  },
+
+  async getChartData(datasetId: string, chartConfig: ChartConfig) {
+    const response = await api.post(`/datasets/${datasetId}/chart-data`, chartConfig);
+    return response.data;
+  }
+};

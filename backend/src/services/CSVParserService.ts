@@ -40,7 +40,7 @@ export class CSVParserService {
             reject(error);
           }
         },
-        error: (error) => {
+        error: (error: any) => {
           reject(error);
         }
       });
@@ -76,7 +76,7 @@ export class CSVParserService {
             reject(error);
           }
         },
-        error: (error) => {
+        error: (error: any) => {
           reject(error);
         }
       });
