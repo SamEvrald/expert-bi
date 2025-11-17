@@ -10,13 +10,21 @@
     "@mui/x-data-grid": "^8.18.0",
     "aws-sdk": "^2.1692.0",
     "bcrypt": "^6.0.0",
+    "chart.js": "^4.5.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.554.0",
     "papaparse": "^5.5.3",
+    "react-chartjs-2": "^5.3.1",
     "recharts": "^3.4.1",
+    "tailwind-merge": "^3.4.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.5",
     "@types/multer": "^2.0.0",
-    "@types/papaparse": "^5.3.16"
+    "@types/papaparse": "^5.3.16",
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25"
   }
 }

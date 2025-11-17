@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from 'react';
 import { useLocation, useParams, Navigate, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApiService } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import LoadingAnalysis from '@/components/LoadingAnalysis';
+import ErrorHandler from '../utils/errorHandler';
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
@@ -308,6 +309,51 @@ const Analytics = () => {
     handleDrillDown(column, isNumerical ? 'numerical' : 'categorical');
   };
 
+  const handleDetectTypes = async () => {
+    if (!params.id) return;
+
+    try {
+      setLoading(true);
+      const datasetId = parseInt(params.id);
+
+      const result = await ApiService.detectTypes(datasetId);
+      if (result.success && result.data) {
+        setAnalysis((prev) => ({
+          ...prev!,
+          columns: prev?.columns.map((col) => ({
+            ...col,
+            type: result.data.columns[col.name]?.type || col.type,
+          })) || [],
+        }));
+      }
+    } catch (err) {
+      ErrorHandler.handle(err, 'Failed to detect column types');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!params.id) return;
+
+    try {
+      const datasetId = parseInt(params.id);
+      const blob = await ApiService.exportDataset(datasetId, 'csv');
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${dataset?.originalName || 'dataset'}_analysis.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      ErrorHandler.handle(err, 'Failed to export dataset');
+    }
+  };
+
   if (!user) return <Navigate to="/login" replace />;
   
   if (loading) {
@@ -346,13 +392,6 @@ const Analytics = () => {
     }
   };
 
-  const handleExportReport = () => {
-    toast({
-      title: "Export Feature",
-      description: "Export functionality will be available soon!",
-    });
-  };
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -371,7 +410,7 @@ const Analytics = () => {
                 </p>
               </div>
             </div>
-            <Button variant="default" onClick={handleExportReport}>
+            <Button variant="default" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
               Export Report
             </Button>

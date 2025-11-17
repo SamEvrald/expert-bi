@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { login as apiLogin } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,17 +7,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { LogIn, Mail, Lock, BarChart3 } from "lucide-react";
+import { LogIn, Mail, Lock, BarChart3, AlertCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { user, login } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = (location.state as any)?.from?.pathname || '/dashboard';
 
   if (user) {
     return <Navigate to="/dashboard" replace />;
@@ -25,18 +29,18 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
 
     try {
-      const result = await login({ email, password });
-      if (result?.success) {
-        navigate('/dashboard');
-        return;
+      const success = await login(email, password);
+      if (success) {
+        navigate(from, { replace: true });
+      } else {
+        setError('Invalid email or password');
       }
-      toast({ title: 'Login failed', description: result?.message || 'Invalid credentials', variant: 'destructive' });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to login');
-      toast({ title: 'Login error', description: message, variant: 'destructive' });
+    } catch (err) {
+      setError('An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -101,6 +105,14 @@ const Login = () => {
                   />
                 </div>
               </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
 
               <Button type="submit" className="w-full" disabled={loading} variant="gradient">
                 {loading ? "Signing in..." : "Sign In"}

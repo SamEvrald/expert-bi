@@ -1,202 +1,515 @@
-// Minimal ApiService that automatically reads token from localStorage and attaches Authorization header
-export type ApiResponse<T = unknown> = {
-  success: boolean;
-  status: number;
-  message?: string;
-  data?: T;
-  errors?: unknown;
-  timestamp?: string;
-};
+import axios, { AxiosInstance, AxiosError } from 'axios';
+import {
+  Dataset,
+  Insight,
+  ColumnAnalysis,
+  ApiResponse,
+} from '../types/api.types';
 
-function getMessageFromUnknown(v: unknown): string | undefined {
-  if (!v) return undefined;
-  if (typeof v === 'string') return v;
-  if (v instanceof Error) return v.message;
-  if (typeof v === 'object' && v !== null) {
-    const o = v as Record<string, unknown>;
-    if (typeof o.message === 'string') return o.message;
-    if (typeof o.msg === 'string') return o.msg;
-  }
-  return undefined;
+// Additional type definitions for API responses
+export interface DatasetAnalysis {
+  id: number;
+  dataset_id: number;
+  total_rows: number;
+  total_columns: number;
+  memory_usage: number;
+  column_types: Record<string, string>;
+  missing_values: Record<string, number>;
+  duplicate_rows: number;
+  numeric_columns: string[];
+  categorical_columns: string[];
+  datetime_columns: string[];
+  text_columns: string[];
+  summary_statistics: Record<string, ColumnStatistics>;
+  correlations?: Record<string, Record<string, number>>;
+  quality_score?: number;
+  columns: AnalysisColumn[];
+  preview: Record<string, unknown>[];
+  created_at: string;
+  updated_at: string;
 }
 
-// Minimal ApiService that automatically reads token from localStorage and attaches Authorization header
-export class ApiService {
-  static baseUrl = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:5000/api';
-  static _token: string | null = null;
+export interface AnalysisColumn {
+  name: string;
+  type: string;
+  nullCount?: number;
+  uniqueCount?: number;
+  completeness?: number;
+  sampleValues?: (string | number)[];
+  mean?: number;
+  median?: number;
+  std?: number;
+  min?: string | number;
+  max?: string | number;
+  mode?: string | number;
+  [key: string]: unknown;
+}
 
-  static setAuthToken(token: string | null) {
-    this._token = token;
-    if (typeof window === 'undefined') return;
-    if (token) {
-      localStorage.setItem('token', token);
-      localStorage.setItem('access_token', token);
-    } else {
-      localStorage.removeItem('token');
-      localStorage.removeItem('access_token');
-    }
-  }
+export interface ColumnStatistics {
+  count: number;
+  unique: number;
+  top?: string | number;
+  freq?: number;
+  mean?: number;
+  std?: number;
+  min?: number | string;
+  max?: number | string;
+  '25%'?: number;
+  '50%'?: number;
+  '75%'?: number;
+  null_count: number;
+  null_percentage: number;
+}
 
-  private static buildHeaders(custom?: Record<string, string>) {
-    const headers: Record<string, string> = { ...(custom || {}) };
-    const token =
-      this._token ??
-      (typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('access_token')) : null);
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    return headers;
-  }
+export interface ChartData {
+  id: number;
+  dataset_id: number;
+  chart_type: string;
+  title: string;
+  description?: string;
+  config: ChartConfig;
+  data: ChartDataPoints;
+  created_at: string;
+  updated_at: string;
+}
 
-  static async request<T = unknown>(
-    method: string,
-    path: string,
-    body?: unknown,
-    opts: { headers?: Record<string, string>; credentials?: RequestCredentials } = {}
-  ): Promise<ApiResponse<T>> {
-    const url = `${this.baseUrl}${path}`;
-    const headers = this.buildHeaders(opts.headers);
+export interface ChartConfig {
+  x_column: string;
+  y_column?: string;
+  group_by?: string;
+  aggregation?: string;
+  filters?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+}
 
-    let payload: BodyInit | undefined = undefined;
-    if (body instanceof FormData) {
-      payload = body;
-      // do not set Content-Type; browser sets it for FormData
-    } else if (body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-      payload = JSON.stringify(body);
-    }
+export interface ChartDataPoints {
+  labels: string[];
+  datasets: Array<{
+    label: string;
+    data: number[];
+    backgroundColor?: string | string[];
+    borderColor?: string | string[];
+    borderWidth?: number;
+  }>;
+}
 
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: payload,
-      credentials: opts.credentials ?? 'include'
+export interface DataPreviewResponse {
+  data: Record<string, unknown>[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface DataQualityReport {
+  quality_score: number;
+  issues: Array<{
+    type: string;
+    column: string;
+    count: number;
+    severity: 'low' | 'medium' | 'high';
+    description: string;
+  }>;
+  recommendations: string[];
+}
+
+export interface CleaningResult {
+  cleaned_rows: number;
+  removed_duplicates?: number;
+  handled_missing?: number;
+  removed_outliers?: number;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ColumnOperation {
+  column: string;
+  operation: string;
+  value?: string | number | boolean;
+}
+
+export interface DataCleaningOptions {
+  remove_duplicates?: boolean;
+  handle_missing?: 'drop' | 'fill_mean' | 'fill_median' | 'fill_mode';
+  remove_outliers?: boolean;
+  standardize_columns?: boolean;
+  trim_whitespace?: boolean;
+  column_operations?: ColumnOperation[];
+}
+
+class ApiService {
+  private api: AxiosInstance;
+
+  constructor() {
+    this.api = axios.create({
+      baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
 
-    const text = await res.text();
-    let parsed: unknown = null;
+    // Add token to requests if available
+    this.api.interceptors.request.use((config) => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
+
+    // Handle response errors
+    this.api.interceptors.response.use(
+      (response) => response,
+      (error: AxiosError) => {
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  // Dataset endpoints
+  async getDatasets(): Promise<ApiResponse<Dataset[]>> {
     try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      parsed = text;
+      const response = await this.api.get<Dataset[]>('/datasets');
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getDataset(id: number): Promise<ApiResponse<Dataset>> {
+    try {
+      const response = await this.api.get<Dataset>(`/datasets/${id}`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async uploadDataset(file: File, description?: string): Promise<ApiResponse<Dataset>> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (description) {
+        formData.append('description', description);
+      }
+
+      const response = await this.api.post<Dataset>('/datasets/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async deleteDataset(id: number): Promise<ApiResponse<void>> {
+    try {
+      await this.api.delete(`/datasets/${id}`);
+      return { success: true };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async updateDataset(
+    id: number,
+    updates: Partial<Dataset>
+  ): Promise<ApiResponse<Dataset>> {
+    try {
+      const response = await this.api.patch<Dataset>(`/datasets/${id}`, updates);
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Analysis endpoints
+  async getDatasetAnalysis(datasetId: number): Promise<ApiResponse<DatasetAnalysis>> {
+    try {
+      const response = await this.api.get<DatasetAnalysis>(
+        `/datasets/${datasetId}/analysis`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async analyzeDataset(datasetId: number): Promise<ApiResponse<DatasetAnalysis>> {
+    try {
+      const response = await this.api.post<DatasetAnalysis>(
+        `/datasets/${datasetId}/analyze`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getColumnAnalysis(
+    datasetId: number,
+    columnName: string
+  ): Promise<ApiResponse<ColumnAnalysis>> {
+    try {
+      const response = await this.api.get<ColumnAnalysis>(
+        `/datasets/${datasetId}/columns/${columnName}/analysis`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Insights endpoints
+  async getInsights(datasetId: number): Promise<ApiResponse<Insight[]>> {
+    try {
+      const response = await this.api.get<Insight[]>(`/datasets/${datasetId}/insights`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async generateInsights(datasetId: number): Promise<ApiResponse<Insight[]>> {
+    try {
+      const response = await this.api.post<Insight[]>(
+        `/datasets/${datasetId}/insights/generate`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getInsight(datasetId: number, insightId: number): Promise<ApiResponse<Insight>> {
+    try {
+      const response = await this.api.get<Insight>(
+        `/datasets/${datasetId}/insights/${insightId}`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Chart endpoints
+  async generateChart(
+    datasetId: number,
+    config: {
+      chart_type: string;
+      x_column: string;
+      y_column?: string;
+      group_by?: string;
+      aggregation?: string;
+      filters?: Record<string, unknown>;
+    }
+  ): Promise<ApiResponse<ChartData>> {
+    try {
+      const response = await this.api.post<ChartData>(
+        `/datasets/${datasetId}/charts`,
+        config
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getCharts(datasetId: number): Promise<ApiResponse<ChartData[]>> {
+    try {
+      const response = await this.api.get<ChartData[]>(
+        `/datasets/${datasetId}/charts`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async deleteChart(datasetId: number, chartId: number): Promise<ApiResponse<void>> {
+    try {
+      await this.api.delete(`/datasets/${datasetId}/charts/${chartId}`);
+      return { success: true };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Data preview
+  async getDataPreview(
+    datasetId: number,
+    limit: number = 100,
+    offset: number = 0
+  ): Promise<ApiResponse<DataPreviewResponse>> {
+    try {
+      const response = await this.api.get<DataPreviewResponse>(
+        `/datasets/${datasetId}/preview?limit=${limit}&offset=${offset}`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Export endpoints
+  async exportDataset(
+    datasetId: number,
+    format: 'csv' | 'json' | 'excel' = 'csv'
+  ): Promise<Blob> {
+    const response = await this.api.get(`/datasets/${datasetId}/export`, {
+      params: { format },
+      responseType: 'blob',
+    });
+    return response.data;
+  }
+
+  async exportAnalysis(datasetId: number, format: 'pdf' | 'json' = 'pdf'): Promise<Blob> {
+    const response = await this.api.get(`/datasets/${datasetId}/analysis/export`, {
+      params: { format },
+      responseType: 'blob',
+    });
+    return response.data;
+  }
+
+  // Data cleaning endpoints
+  async applyDataCleaning(
+    datasetId: number,
+    operations: DataCleaningOptions
+  ): Promise<ApiResponse<CleaningResult>> {
+    try {
+      const response = await this.api.post<CleaningResult>(
+        `/datasets/${datasetId}/clean`,
+        operations
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getDataQualityReport(
+    datasetId: number
+  ): Promise<ApiResponse<DataQualityReport>> {
+    try {
+      const response = await this.api.get<DataQualityReport>(
+        `/datasets/${datasetId}/quality`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Statistics endpoints
+  async getDatasetStatistics(
+    datasetId: number
+  ): Promise<ApiResponse<Record<string, ColumnStatistics>>> {
+    try {
+      const response = await this.api.get<Record<string, ColumnStatistics>>(
+        `/datasets/${datasetId}/statistics`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getColumnStatistics(
+    datasetId: number,
+    columnName: string
+  ): Promise<ApiResponse<ColumnStatistics>> {
+    try {
+      const response = await this.api.get<ColumnStatistics>(
+        `/datasets/${datasetId}/columns/${columnName}/statistics`
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Search and filter
+  async searchDatasets(query: string): Promise<ApiResponse<Dataset[]>> {
+    try {
+      const response = await this.api.get<Dataset[]>('/datasets/search', {
+        params: { q: query },
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Batch operations
+  async batchDeleteDatasets(ids: number[]): Promise<ApiResponse<{ deleted: number }>> {
+    try {
+      const response = await this.api.post<{ deleted: number }>('/datasets/batch/delete', { ids });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async batchAnalyzeDatasets(
+    ids: number[]
+  ): Promise<ApiResponse<{ analyzed: number }>> {
+    try {
+      const response = await this.api.post<{ analyzed: number }>('/datasets/batch/analyze', { ids });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Error handler
+  private handleError(error: unknown): ApiResponse<never> {
+    console.error('API Error:', error);
+
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError<{ detail?: string; message?: string }>;
+      const message =
+        axiosError.response?.data?.detail ||
+        axiosError.response?.data?.message ||
+        axiosError.message ||
+        'An error occurred';
+
+      return {
+        success: false,
+        error: message,
+      };
     }
 
-    if (!res.ok) {
-      const errMsg = getMessageFromUnknown(parsed) || res.statusText || 'API request failed';
-      const err = new Error(errMsg) as Error & { status?: number; body?: unknown };
-      err.status = res.status;
-      err.body = parsed;
-      throw err;
+    if (error instanceof Error) {
+      return {
+        success: false,
+        error: error.message,
+      };
     }
 
-    // Cast parsed to ApiResponse<T> — backend uses this shape
-    return (parsed as ApiResponse<T>);
+    return {
+      success: false,
+      error: 'An unexpected error occurred',
+    };
   }
 
-  static get<T = unknown>(path: string, opts?: { headers?: Record<string, string>; credentials?: RequestCredentials }) {
-    return this.request<T>('GET', path, undefined, opts);
-  }
-  static post<T = unknown>(path: string, body?: unknown, opts?: { headers?: Record<string, string>; credentials?: RequestCredentials }) {
-    return this.request<T>('POST', path, body, opts);
-  }
-  static put<T = unknown>(path: string, body?: unknown, opts?: { headers?: Record<string, string>; credentials?: RequestCredentials }) {
-    return this.request<T>('PUT', path, body, opts);
-  }
-  static del<T = unknown>(path: string, opts?: { headers?: Record<string, string>; credentials?: RequestCredentials }) {
-    return this.request<T>('DELETE', path, undefined, opts);
-  }
-
-  // convenience helpers with proper typing
-  static getProjects() { 
-    return this.get<{ name: string; description?: string; id: number; status: string }[]>('/projects'); 
-  }
-  
-  static getDatasets() { 
-    return this.get<Array<{
-      id: number;
-      name: string;
-      description?: string;
-      originalFilename: string;
-      sizeBytes: number;
-      rowCount: number;
-      status: 'uploaded' | 'processing' | 'completed' | 'failed';
-      createdAt: string;
-      updatedAt: string;
-    }>>('/datasets'); 
-  }
-  
-  static getDataset(id: string | number) { 
-    return this.get<{
-      id: number;
-      name: string;
-      description?: string;
-      originalFilename: string;
-      sizeBytes: number;
-      rowCount: number;
-      status: 'uploaded' | 'processing' | 'completed' | 'failed';
-      metadata?: {
-        headers?: string[];
-        preview?: Array<Record<string, unknown>>;
-        analysis?: unknown;
-      };
-      createdAt: string;
-      updatedAt: string;
-    }>(`/datasets/${id}`); 
-  }
-  
-  static getDatasetAnalysis(datasetId: string | number) { 
-    return this.get<{
-      summary: {
-        totalRows: number;
-        totalColumns: number;
-        fileSize: number;
-        status: string;
-        dataQuality?: string;
-      };
-      columns: Array<{
-        name: string;
-        type: string;
-        nullCount?: number;
-        uniqueCount?: number;
-        sampleValues?: (string | number)[];
-        completeness?: number;
-      }>;
-      insights: Array<{
-        type: 'info' | 'success' | 'warning' | 'error';
-        title: string;
-        description: string;
-      }>;
-      chartData: {
-        rowDistribution: Array<{ name: string; value: number }>;
-        columnTypes?: Array<{ name: string; value: number }>;
-        dataQuality?: Array<{ name: string; completeness: number; missing: number }>;
-      };
-      preview: Array<Record<string, string | number | boolean | null>>;
-      dataQuality?: {
-        score: string;
-        completeness: number;
-        uniqueness: number;
-        missingValues: number;
-        duplicates: number;
-        totalCells: number;
-      };
-      statistics?: {
-        numerical: Record<string, {
-          mean: number;
-          median: number;
-          std: number;
-          min: number;
-          max: number;
-          count: number;
-        }>;
-        categorical: Record<string, Record<string, number>>;
-      };
-    }>(`/datasets/${datasetId}/analysis`); 
-  }
-  
-  static uploadDataset(formData: FormData) { 
-    return this.post<{ id: number }>('/datasets/upload', formData); 
-  }
-  
-  static createProject(payload: { name: string; description?: string }) { 
-    return this.post<{ id: number; name: string; description?: string }>('/projects', payload); 
+  // Health check
+  async healthCheck(): Promise<boolean> {
+    try {
+      const response = await this.api.get('/health');
+      return response.status === 200;
+    } catch (error) {
+      return false;
+    }
   }
 }
+
+// Export singleton instance
+const api = new ApiService();
+export default api;
