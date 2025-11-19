@@ -1,27 +1,62 @@
 import React, { useState, useMemo } from 'react';
 import { Insight, InsightCategory, InsightType } from '../../../types/api.types';
-import { InsightCard } from './InsightCard';
-import { InsightFilter } from '../../../types/insights';
-import {
-  calculateInsightStats,
-  filterInsights,
-  sortInsights,
-  getCategoryInfo,
-  getTypeInfo,
-} from '../../../utils/insightsUtils';
-import { formatPercentage } from '../../../utils/typeDetectionUtils';
-import {
-  Search,
-  Filter as FilterIcon,
-  SortAsc,
-  SortDesc,
-  Download,
-  RefreshCw,
-  AlertCircle,
-  TrendingUp,
-  Grid,
-} from 'lucide-react';
-import { Sparkles, Trash2 } from 'lucide-react';
+import { Sparkles, Trash2, RefreshCw, TrendingUp, AlertTriangle, BarChart3, GitBranch } from 'lucide-react';
+
+interface InsightFilter {
+  categories: InsightCategory[];
+  types: InsightType[];
+  minConfidence: number;
+  maxConfidence: number;
+  searchTerm: string;
+  columns: string[];
+}
+
+const filterInsights = (insights: Insight[], filter: InsightFilter): Insight[] => {
+  return insights.filter((insight) => {
+    if (filter.categories.length > 0 && !filter.categories.includes(insight.category as InsightCategory)) return false;
+    if (filter.types.length > 0 && !filter.types.includes(insight.type as InsightType)) return false;
+    if ((insight.confidence || 0) < filter.minConfidence) return false;
+    if ((insight.confidence || 0) > filter.maxConfidence) return false;
+    if (filter.searchTerm && !insight.title.toLowerCase().includes(filter.searchTerm.toLowerCase()) && 
+        !insight.description.toLowerCase().includes(filter.searchTerm.toLowerCase())) return false;
+    return true;
+  });
+};
+
+const sortInsights = (insights: Insight[], sortBy: string, direction: 'asc' | 'desc'): Insight[] => {
+  return [...insights].sort((a, b) => {
+    let aValue: any, bValue: any;
+    
+    switch (sortBy) {
+      case 'confidence':
+        aValue = a.confidence || 0;
+        bValue = b.confidence || 0;
+        break;
+      case 'importance':
+        aValue = a.importance || 0;
+        bValue = b.importance || 0;
+        break;
+      case 'date':
+        aValue = a.created_at || '';
+        bValue = b.created_at || '';
+        break;
+      case 'category':
+        aValue = a.category || '';
+        bValue = b.category || '';
+        break;
+      case 'type':
+        aValue = a.type || '';
+        bValue = b.type || '';
+        break;
+      default:
+        return 0;
+    }
+    
+    if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+};
 
 interface InsightsListProps {
   insights: Insight[];
@@ -30,6 +65,40 @@ interface InsightsListProps {
   onDeleteInsight?: (id: number) => void;
   loading?: boolean;
 }
+
+const getCategoryIcon = (category?: string) => {
+  switch (category) {
+    case 'quality':
+      return AlertTriangle;
+    case 'anomaly':
+      return TrendingUp;
+    case 'relationship':
+      return GitBranch;
+    case 'pattern':
+      return BarChart3;
+    case 'structure':
+      return BarChart3;
+    default:
+      return Sparkles;
+  }
+};
+
+const getCategoryColor = (category?: string) => {
+  switch (category) {
+    case 'quality':
+      return 'text-orange-600 bg-orange-100';
+    case 'anomaly':
+      return 'text-red-600 bg-red-100';
+    case 'relationship':
+      return 'text-blue-600 bg-blue-100';
+    case 'pattern':
+      return 'text-purple-600 bg-purple-100';
+    case 'structure':
+      return 'text-green-600 bg-green-100';
+    default:
+      return 'text-gray-600 bg-gray-100';
+  }
+};
 
 export const InsightsList: React.FC<InsightsListProps> = ({
   insights,
@@ -45,8 +114,6 @@ export const InsightsList: React.FC<InsightsListProps> = ({
   const [sortBy, setSortBy] = useState<'confidence' | 'importance' | 'date' | 'category' | 'type'>('importance');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
-
-  const stats = useMemo(() => calculateInsightStats(insights), [insights]);
 
   // Filter and sort insights
   const filteredAndSortedInsights = useMemo(() => {
@@ -88,13 +155,15 @@ export const InsightsList: React.FC<InsightsListProps> = ({
         <p className="text-gray-600 mb-6">
           Click the button below to generate insights and discover patterns in your data
         </p>
-        <button
-          onClick={onRefresh}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-        >
-          <Sparkles className="w-5 h-5" />
-          Generate Insights
-        </button>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            <Sparkles className="w-5 h-5" />
+            Generate Insights
+          </button>
+        )}
       </div>
     );
   }
@@ -110,13 +179,15 @@ export const InsightsList: React.FC<InsightsListProps> = ({
             Automatically discovered patterns and anomalies
           </p>
         </div>
-        <button
-          onClick={onRefresh}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -208,13 +279,15 @@ export const InsightsList: React.FC<InsightsListProps> = ({
                   )}
                 </div>
                 
-                <button
-                  onClick={() => onDeleteInsight(insight.id)}
-                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Dismiss insight"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                {onDeleteInsight && (
+                  <button
+                    onClick={() => onDeleteInsight(insight.id)}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Dismiss insight"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -222,38 +295,4 @@ export const InsightsList: React.FC<InsightsListProps> = ({
       </div>
     </div>
   );
-};
-
-const getCategoryIcon = (category?: string) => {
-  switch (category) {
-    case 'quality':
-      return AlertTriangle;
-    case 'anomaly':
-      return TrendingUp;
-    case 'relationship':
-      return GitBranch;
-    case 'pattern':
-      return BarChart3;
-    case 'structure':
-      return BarChart3;
-    default:
-      return Sparkles;
-  }
-};
-
-const getCategoryColor = (category?: string) => {
-  switch (category) {
-    case 'quality':
-      return 'text-orange-600 bg-orange-100';
-    case 'anomaly':
-      return 'text-red-600 bg-red-100';
-    case 'relationship':
-      return 'text-blue-600 bg-blue-100';
-    case 'pattern':
-      return 'text-purple-600 bg-purple-100';
-    case 'structure':
-      return 'text-green-600 bg-green-100';
-    default:
-      return 'text-gray-600 bg-gray-100';
-  }
 };
