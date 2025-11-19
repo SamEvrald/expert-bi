@@ -42,16 +42,23 @@ export const ChartBuilder: React.FC<ChartBuilderProps> = ({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Helper function to check if a column is numeric
+  const isNumericType = (type: string): boolean => {
+    return ['numeric', 'currency', 'percentage'].includes(type);
+  };
+
+  // Helper function to check if a column is categorical
+  const isCategoricalType = (type: string): boolean => {
+    return ['categorical', 'datetime', 'date', 'boolean', 'text'].includes(type);
+  };
+
   // Get numeric and categorical columns
   const numericColumns = preview.columns.filter(
-    (col) => columnTypes[col]?.detected_type === 'numeric' || 
-             columnTypes[col]?.detected_type === 'currency' ||
-             columnTypes[col]?.detected_type === 'percentage'
+    (col) => columnTypes[col] && isNumericType(columnTypes[col].detected_type)
   );
 
   const categoricalColumns = preview.columns.filter(
-    (col) => columnTypes[col]?.detected_type === 'categorical' ||
-             columnTypes[col]?.detected_type === 'date'
+    (col) => columnTypes[col] && isCategoricalType(columnTypes[col].detected_type)
   );
 
   const allColumns = preview.columns;
@@ -64,7 +71,7 @@ export const ChartBuilder: React.FC<ChartBuilderProps> = ({
     if (!yAxis && numericColumns.length > 0) {
       setYAxis(numericColumns[0]);
     }
-  }, [categoricalColumns, numericColumns]);
+  }, [categoricalColumns, numericColumns, xAxis, yAxis]);
 
   // Generate chart data when axes change
   useEffect(() => {
@@ -82,7 +89,7 @@ export const ChartBuilder: React.FC<ChartBuilderProps> = ({
         onRequestSuggestions(xAxis, yAxis);
       }
     }
-  }, [xAxis, yAxis, groupBy, preview.rows]);
+  }, [xAxis, yAxis, groupBy, preview.rows, onRequestSuggestions]);
 
   const handleSuggestionSelect = (suggestion: ChartSuggestion) => {
     setSelectedType(suggestion.chart_type);
@@ -140,7 +147,6 @@ export const ChartBuilder: React.FC<ChartBuilderProps> = ({
       case 'bar':
         return <BarChart data={chartData} options={chartOptions} height={chartHeight} />;
       case 'pie':
-      case 'doughnut':
         return <PieChart data={chartData} options={chartOptions} height={chartHeight} type={selectedType} />;
       case 'scatter':
         return <ScatterChart data={chartData} options={chartOptions} height={chartHeight} />;
@@ -269,7 +275,7 @@ export const ChartBuilder: React.FC<ChartBuilderProps> = ({
                     <option value="">Select column...</option>
                     {allColumns.map((col) => (
                       <option key={col} value={col}>
-                        {col}
+                        {col} {columnTypes[col] ? `(${columnTypes[col].detected_type})` : ''}
                       </option>
                     ))}
                   </select>
@@ -288,7 +294,7 @@ export const ChartBuilder: React.FC<ChartBuilderProps> = ({
                     <option value="">Select column...</option>
                     {numericColumns.map((col) => (
                       <option key={col} value={col}>
-                        {col}
+                        {col} {columnTypes[col] ? `(${columnTypes[col].detected_type})` : ''}
                       </option>
                     ))}
                   </select>
@@ -307,7 +313,7 @@ export const ChartBuilder: React.FC<ChartBuilderProps> = ({
                     <option value="">None</option>
                     {categoricalColumns.map((col) => (
                       <option key={col} value={col}>
-                        {col}
+                        {col} {columnTypes[col] ? `(${columnTypes[col].detected_type})` : ''}
                       </option>
                     ))}
                   </select>

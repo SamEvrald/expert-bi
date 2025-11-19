@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Grid,
 } from 'lucide-react';
+import { Sparkles, Trash2 } from 'lucide-react';
 
 interface InsightsListProps {
   insights: Insight[];
@@ -78,6 +79,24 @@ export const InsightsList: React.FC<InsightsListProps> = ({
 
   // Calculate high importance count
   const highImportanceCount = insights.filter((i) => (i.importance || 0) >= 0.7).length;
+
+  if (insights.length === 0) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+        <Sparkles className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">No Insights Yet</h3>
+        <p className="text-gray-600 mb-6">
+          Generate insights to discover patterns and anomalies in your data
+        </p>
+        <button
+          onClick={onRefresh}
+          className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          Generate Insights
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

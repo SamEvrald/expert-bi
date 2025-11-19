@@ -1,103 +1,129 @@
-import { ApiService } from './api';
+import axios from 'axios';
+import { ApiResponse } from '../types/api.types';
 
-export async function register(payload: { name: string; email: string; password: string }) {
-  return ApiService.post('/auth/register', payload);
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
-export async function login(payload: { email: string; password: string }) {
-  const resp = await ApiService.post('/auth/login', payload);
-  // backend returns token in resp.data.token or resp.token
-  const token = resp?.data?.token || resp?.token || resp?.data?.accessToken || resp?.access_token;
-  if (token) {
-    localStorage.setItem('token', token);
-    localStorage.setItem('access_token', token);
-  }
-  return resp; // return full resp so callers can inspect success/data
-}
-
-export function logout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('access_token');
-}
-
-export interface User {
-  id: string;
+interface LoginCredentials {
   email: string;
+  password: string;
+}
+
+interface RegisterCredentials {
+  email: string;
+  password: string;
   name: string;
-  createdAt: string;
 }
 
-export class AuthService {
-  private static readonly CURRENT_USER_KEY = 'expert-bi-current-user';
-  private static readonly REFRESH_TOKEN_KEY = 'expert-bi-refresh-token';
-  
-  static async login(email: string, password: string): Promise<User> {
-    try {
-      const response = await login({ email, password });
-      const user = response.data.user;
-      
-      // Store user data
-      localStorage.setItem(this.CURRENT_USER_KEY, JSON.stringify(user));
-      
-      // Store refresh token if provided
-      if (response.data.refreshToken) {
-        localStorage.setItem(this.REFRESH_TOKEN_KEY, response.data.refreshToken);
-      }
-      
-      return user;
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Login failed');
-    }
-  }
-  
-  static async register(email: string, password: string, name: string): Promise<User> {
-    try {
-      const response = await register({ name, email, password });
-      const user = response.data.user;
-      
-      // Store user data
-      localStorage.setItem(this.CURRENT_USER_KEY, JSON.stringify(user));
-      
-      // Store refresh token if provided
-      if (response.data.refreshToken) {
-        localStorage.setItem(this.REFRESH_TOKEN_KEY, response.data.refreshToken);
-      }
-      
-      return user;
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Registration failed');
-    }
-  }
-  
-  static logout(): void {
-    localStorage.removeItem(this.CURRENT_USER_KEY);
-    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-    logout();
-  }
-  
-  static getCurrentUser(): User | null {
-    const stored = localStorage.getItem(this.CURRENT_USER_KEY);
-    return stored ? JSON.parse(stored) : null;
-  }
-  
-  static async refreshCurrentUser(): Promise<User | null> {
-    try {
-      const response = await ApiService.get('/auth/me');
-      const user = response.data as User;
-      localStorage.setItem(this.CURRENT_USER_KEY, JSON.stringify(user));
-      return user;
-    } catch (error) {
-      // Token might be invalid, clear stored user
-      this.logout();
-      return null;
-    }
-  }
-  
-  static isAuthenticated(): boolean {
-    const hasUser = this.getCurrentUser() !== null;
-    const hasToken = localStorage.getItem('auth_token') !== null;
-    return hasUser && hasToken;
-  }
+interface AuthResponse {
+  token?: string;
+  access_token?: string;
+  accessToken?: string;
+  user?: {
+    id: number;
+    email: string;
+    name: string;
+  };
 }
 
-export default { register, login, logout };
+// Create a separate axios instance for auth (since we might not have a token yet)
+const authApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const login = async (credentials: LoginCredentials): Promise<ApiResponse<AuthResponse>> => {
+  try {
+    const response = await authApi.post<AuthResponse>('/auth/login', credentials);
+    
+    // Store token if present
+    const token = response.data.token || response.data.access_token || response.data.accessToken;
+    if (token) {
+      localStorage.setItem('token', token);
+      localStorage.setItem('access_token', token);
+    }
+    
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Login failed',
+    };
+  }
+};
+
+export const register = async (credentials: RegisterCredentials): Promise<ApiResponse<AuthResponse>> => {
+  try {
+    const response = await authApi.post<AuthResponse>('/auth/register', credentials);
+    
+    // Store token if present
+    const token = response.data.token || response.data.access_token || response.data.accessToken;
+    if (token) {
+      localStorage.setItem('token', token);
+      localStorage.setItem('access_token', token);
+    }
+    
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Registration failed',
+    };
+  }
+};
+
+export const logout = async (): Promise<ApiResponse<void>> => {
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    
+    if (token) {
+      await authApi.post('/auth/logout', {}, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+    
+    localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    return { success: true };
+  } catch (error: any) {
+    // Clear local storage even if API call fails
+    localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Logout failed',
+    };
+  }
+};
+
+export const getCurrentUser = async (): Promise<ApiResponse<any>> => {
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    
+    if (!token) {
+      return {
+        success: false,
+        error: 'No authentication token found',
+      };
+    }
+    
+    const response = await authApi.get('/auth/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Failed to get current user',
+    };
+  }
+};

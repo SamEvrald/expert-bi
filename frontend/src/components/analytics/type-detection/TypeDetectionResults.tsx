@@ -76,6 +76,36 @@ export const TypeDetectionResults: React.FC<TypeDetectionResultsProps> = ({
     return Array.from(new Set(Object.values(columnTypes).map((ct) => ct.detected_type)));
   }, [columnTypes]);
 
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'number':
+        return '🔢';
+      case 'text':
+        return '📝';
+      case 'boolean':
+        return '✓';
+      case 'datetime':
+        return '📅';
+      default:
+        return '❓';
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'number':
+        return 'bg-blue-100 text-blue-800';
+      case 'text':
+        return 'bg-green-100 text-green-800';
+      case 'boolean':
+        return 'bg-purple-100 text-purple-800';
+      case 'datetime':
+        return 'bg-orange-100 text-orange-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Stats */}
@@ -169,7 +199,7 @@ export const TypeDetectionResults: React.FC<TypeDetectionResultsProps> = ({
         {/* Sort */}
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
+          onChange={(e) => setSortBy(e.target.value as 'name' | 'confidence' | 'type')}
           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="name">Sort by Name</option>
@@ -301,6 +331,56 @@ export const TypeDetectionResults: React.FC<TypeDetectionResultsProps> = ({
         {/* Sidebar */}
         <div className="lg:col-span-1">
           <TypeLegend counts={stats.detectedTypes} showCounts={true} />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Column Type Detection</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Detected {Object.keys(columnTypes).length} columns
+            </p>
+          </div>
+          {onExport && (
+            <button
+              onClick={onExport}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export Results
+            </button>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          {Object.entries(columnTypes).map(([columnName, typeInfo]) => (
+            <div
+              key={columnName}
+              className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <div className="flex items-center gap-3 flex-1">
+                <span className="text-2xl">{getTypeIcon(typeInfo.detected_type)}</span>
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">{columnName}</h4>
+                  <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
+                    <span>Pandas: {typeInfo.pandas_dtype}</span>
+                    <span>•</span>
+                    <span>{typeInfo.unique_count.toLocaleString()} unique values</span>
+                    {typeInfo.null_count > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="text-orange-600">{typeInfo.null_count.toLocaleString()} nulls</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTypeColor(typeInfo.detected_type)}`}>
+                {typeInfo.detected_type}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

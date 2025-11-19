@@ -1,7 +1,6 @@
 import React from 'react';
 import { Dataset, ColumnType } from '../../types/api.types';
-import { BarChart3, TrendingUp, AlertCircle, Database } from 'lucide-react';
-import { formatNumber, formatPercentage } from '../../utils/typeDetectionUtils';
+import { BarChart3, TrendingUp, PieChart } from 'lucide-react';
 
 interface StatisticsViewerProps {
   dataset: Dataset;
@@ -12,95 +11,107 @@ export const StatisticsViewer: React.FC<StatisticsViewerProps> = ({
   dataset,
   columnTypes,
 }) => {
-  const columns = Object.entries(columnTypes);
-  const numericColumns = columns.filter(
-    ([, type]) => type.detected_type === 'numeric'
+  const numericColumns = Object.entries(columnTypes).filter(
+    ([, type]) => type.detected_type === 'number'
+  );
+
+  const textColumns = Object.entries(columnTypes).filter(
+    ([, type]) => type.detected_type === 'text'
   );
 
   return (
     <div className="space-y-6">
-      {/* Overall Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Overview Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-600">Total Rows</h3>
-            <Database className="w-5 h-5 text-blue-500" />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <BarChart3 className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Columns</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {dataset.column_count}
+              </p>
+            </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">
-            {formatNumber(dataset.row_count)}
-          </p>
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-600">Columns</h3>
-            <BarChart3 className="w-5 h-5 text-green-500" />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-green-100 rounded-lg">
+              <TrendingUp className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Numeric Columns</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {numericColumns.length}
+              </p>
+            </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{dataset.column_count}</p>
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-600">Numeric Columns</h3>
-            <TrendingUp className="w-5 h-5 text-purple-500" />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-purple-100 rounded-lg">
+              <PieChart className="w-6 h-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Text Columns</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {textColumns.length}
+              </p>
+            </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{numericColumns.length}</p>
-        </div>
-
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-600">File Size</h3>
-            <AlertCircle className="w-5 h-5 text-orange-500" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">
-            {(dataset.file_size / 1024 / 1024).toFixed(1)} MB
-          </p>
         </div>
       </div>
 
-      {/* Column Statistics */}
+      {/* Column Details */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Column Statistics</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Column Statistics
+        </h3>
         <div className="space-y-4">
-          {columns.map(([name, type]) => (
-            <div key={name} className="border-b border-gray-200 pb-4 last:border-0 last:pb-0">
-              <h4 className="font-medium text-gray-900 mb-2">{name}</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {type.statistics?.mean !== undefined && (
+          {Object.entries(columnTypes).map(
+            ([columnName, typeInfo]) => (
+              <div
+                key={columnName}
+                className="border-b border-gray-200 pb-4 last:border-0 last:pb-0"
+              >
+                <h4 className="font-medium text-gray-900 mb-2">{columnName}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
-                    <p className="text-xs text-gray-600">Mean</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {type.statistics.mean.toFixed(2)}
+                    <p className="text-gray-600">Type</p>
+                    <p className="font-medium text-gray-900">
+                      {typeInfo.detected_type}
                     </p>
                   </div>
-                )}
-                {type.statistics?.median !== undefined && (
                   <div>
-                    <p className="text-xs text-gray-600">Median</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {type.statistics.median.toFixed(2)}
+                    <p className="text-gray-600">Unique Values</p>
+                    <p className="font-medium text-gray-900">
+                      {typeInfo.unique_count.toLocaleString()}
                     </p>
                   </div>
-                )}
-                {type.unique_count !== undefined && (
                   <div>
-                    <p className="text-xs text-gray-600">Unique Values</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatNumber(type.unique_count)}
+                    <p className="text-gray-600">Null Count</p>
+                    <p className="font-medium text-gray-900">
+                      {typeInfo.null_count.toLocaleString()}
                     </p>
                   </div>
-                )}
-                {type.null_percentage !== undefined && (
                   <div>
-                    <p className="text-xs text-gray-600">Missing</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatPercentage(type.null_percentage / 100)}
+                    <p className="text-gray-600">Completeness</p>
+                    <p className="font-medium text-gray-900">
+                      {(
+                        (1 - typeInfo.null_count / dataset.row_count) *
+                        100
+                      ).toFixed(1)}
+                      %
                     </p>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          )}
         </div>
       </div>
     </div>

@@ -1,24 +1,21 @@
-import React, { useState } from 'react';
-import { Link, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { login as apiLogin } from '@/lib/auth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
-import { LogIn, Mail, Lock, BarChart3, AlertCircle } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { useState } from 'react';
+import { useNavigate, Link, Navigate, useLocation } from "react-router-dom";
+import { useAuth } from '@/contexts/AuthContext';  // Changed from @/hooks/useAuth
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, LogIn } from 'lucide-react';
+import { BarChart3 } from "lucide-react";
 
 const Login = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { user, login } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const location = useLocation();
 
   const from = (location.state as any)?.from?.pathname || '/dashboard';
@@ -29,25 +26,45 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
+    
+    if (!email || !password) {
+      toast({
+        title: 'Error',
+        description: 'Please enter both email and password',
+        variant: 'destructive',
+      });
+      return;
+    }
 
+    setLoading(true);
     try {
       const success = await login(email, password);
       if (success) {
+        toast({
+          title: 'Success',
+          description: 'Logged in successfully',
+        });
         navigate(from, { replace: true });
       } else {
-        setError('Invalid email or password');
+        toast({
+          title: 'Error',
+          description: 'Invalid email or password',
+          variant: 'destructive',
+        });
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      toast({
+        title: 'Error',
+        description: 'An error occurred. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-primary flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="w-full max-w-md space-y-6">
         {/* Logo */}
         <div className="text-center animate-fade-in">
@@ -76,73 +93,47 @@ const Login = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  required
+                />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  required
+                />
               </div>
-
-              {/* Error Message */}
-              {error && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
-              )}
-
-              <Button type="submit" className="w-full" disabled={loading} variant="gradient">
-                {loading ? "Signing in..." : "Sign In"}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  'Sign In'
+                )}
               </Button>
             </form>
-
-            <Separator className="my-6" />
-
-            <div className="text-center space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Don't have an account?{" "}
-                <Link to="/register" className="text-accent hover:underline font-medium">
-                  Sign up
-                </Link>
-              </p>
-              <Link to="/forgot-password" className="text-sm text-accent hover:underline">
-                Forgot your password?
+            <div className="mt-4 text-center text-sm">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-primary hover:underline font-medium">
+                Sign up
               </Link>
             </div>
           </CardContent>
         </Card>
-
-        {/* Demo Credentials */}
-        <Alert>
-          <AlertDescription className="text-sm">
-            <strong>Demo Credentials:</strong><br />
-            Email: demo@expertbi.com<br />
-            Password: demo123
-          </AlertDescription>
-        </Alert>
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TrendingUp, BarChart3, Download, ArrowLeft, FileText, Database, Lightbulb, Loader2, AlertTriangle, CheckCircle, Info, Filter, SortAsc, SortDesc, Eye, Settings } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { ApiService } from "@/lib/api";
+import api from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import LoadingAnalysis from '@/components/LoadingAnalysis';
 import ErrorHandler from '../utils/errorHandler';
@@ -201,7 +201,7 @@ const Analytics = () => {
       if (datasetId) {
         setLoading(true);
         try {
-          const datasetResponse = await ApiService.getDataset(datasetId);
+          const datasetResponse = await api.getDataset(datasetId);
           
           if (!datasetResponse.success || !datasetResponse.data) {
             throw new Error('Failed to fetch dataset');
@@ -214,13 +214,13 @@ const Analytics = () => {
             id: parseInt(datasetId.toString())
           });
 
-          if (datasetData.status !== 'completed') {
+          if (datasetData.status !== 'ready') {
             console.log(`Dataset status: ${datasetData.status}, waiting...`);
             setTimeout(() => loadAnalysis(), 2000);
             return;
           }
 
-          const analysisResponse = await ApiService.getDatasetAnalysis(datasetId);
+          const analysisResponse = await api.getDatasetAnalysis(datasetId);
           
           if (!analysisResponse.success || !analysisResponse.data) {
             throw new Error('Failed to fetch analysis');
@@ -228,18 +228,64 @@ const Analytics = () => {
           
           const analysisData = analysisResponse.data;
           
+          // Build summary from available data
+          const summary = {
+            totalRows: analysisData.row_count || 0,
+            totalColumns: analysisData.column_count || 0,
+            fileSize: datasetData.file_size || 0,
+            status: datasetData.status || 'ready',
+            dataQuality: analysisData.dataQuality?.score || 'Good'
+          };
+
+          // Ensure columns are in the right format with proper type assertions
+          const columns: ColumnInfo[] = analysisData.columns.map(col => {
+            const nullCount = typeof col.null_count === 'number' ? col.null_count : 0;
+            const totalRows = summary.totalRows;
+            
+            return {
+              name: col.name,
+              type: typeof col.data_type === 'string' ? col.data_type : 'string',
+              nullCount: nullCount,
+              uniqueCount: typeof col.unique_count === 'number' ? col.unique_count : undefined,
+              sampleValues: Array.isArray(col.sample_values) 
+                ? col.sample_values.map(v => typeof v === 'string' || typeof v === 'number' ? v : String(v))
+                : undefined,
+              completeness: totalRows > 0
+                ? ((totalRows - nullCount) / totalRows * 100)
+                : 100
+            };
+          });
+
+          // Create default insights if not provided
+          const insights = analysisData.insights || [];
+
+          // Transform the analysis data
           const transformedAnalysis: AnalysisResult = {
-            summary: analysisData.summary,
-            columns: analysisData.columns,
-            insights: analysisData.insights,
-            statistics: analysisData.statistics,
+            summary,
+            columns,
+            insights,
+            statistics: analysisData.statistics || { numerical: {}, categorical: {} },
             chartData: {
-              rowDistribution: analysisData.chartData.rowDistribution,
-              columnTypes: analysisData.chartData.columnTypes,
-              dataQuality: analysisData.chartData.dataQuality,
-              topCategories: {}
+              rowDistribution: analysisData.chartData?.rowDistribution || [
+                { name: 'Total Rows', value: summary.totalRows }
+              ],
+              columnTypes: analysisData.chartData?.columnTypes || [],
+              dataQuality: analysisData.chartData?.dataQuality || [],
+              topCategories: analysisData.chartData?.topCategories || {}
             },
-            preview: analysisData.preview,
+            preview: (analysisData.preview || []).map(row => {
+              const cleanRow: Record<string, string | number | boolean | null> = {};
+              for (const [key, value] of Object.entries(row)) {
+                if (value === null || value === undefined) {
+                  cleanRow[key] = null;
+                } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                  cleanRow[key] = value;
+                } else {
+                  cleanRow[key] = String(value);
+                }
+              }
+              return cleanRow;
+            }),
             dataQuality: analysisData.dataQuality
           };
           
@@ -316,13 +362,13 @@ const Analytics = () => {
       setLoading(true);
       const datasetId = parseInt(params.id);
 
-      const result = await ApiService.detectTypes(datasetId);
+      const result = await api.detectTypes(datasetId);
       if (result.success && result.data) {
         setAnalysis((prev) => ({
           ...prev!,
           columns: prev?.columns.map((col) => ({
             ...col,
-            type: result.data.columns[col.name]?.type || col.type,
+            type: result.data.columns[col.name]?.detected_type || col.type,
           })) || [],
         }));
       }
@@ -338,7 +384,7 @@ const Analytics = () => {
 
     try {
       const datasetId = parseInt(params.id);
-      const blob = await ApiService.exportDataset(datasetId, 'csv');
+      const blob = await api.exportDataset(datasetId, 'csv');
       
       // Create download link
       const url = window.URL.createObjectURL(blob);

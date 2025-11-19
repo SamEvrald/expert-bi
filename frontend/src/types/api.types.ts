@@ -55,83 +55,50 @@ export interface RegisterCredentials {
 // Dataset Types
 // ============================================
 
+// Data Types
+export type DataType = 
+  | 'numeric' 
+  | 'categorical' 
+  | 'datetime' 
+  | 'boolean' 
+  | 'text' 
+  | 'currency' 
+  | 'percentage'
+  | 'date'
+  | 'integer'
+  | 'float'
+  | 'string';
+
 export interface Dataset {
   id: number;
   name: string;
   description?: string;
+  file_name: string;
   file_path: string;
+  file_type: string;
+  file_size: number;
   row_count: number;
   column_count: number;
-  file_size: number;
+  status: string;
   created_at: string;
-  updated_at: string;
-  status: 'processing' | 'ready' | 'error';
-  error_message?: string;
+  updated_at?: string;
 }
-
-export interface AnalysisStatus {
-  type_detection: 'pending' | 'processing' | 'completed' | 'failed';
-  insights: 'pending' | 'processing' | 'completed' | 'failed';
-  last_analysis?: string;
-}
-
-export interface DatasetUploadRequest {
-  file: File;
-  name: string;
-  description?: string;
-}
-
-export interface DatasetUploadProgress {
-  progress: number;
-  stage: 'uploading' | 'processing' | 'analyzing' | 'complete';
-  message: string;
-}
-
-// ============================================
-// Column Type Detection Types
-// ============================================
-
-export type DataType = 
-  | 'numeric'
-  | 'categorical'
-  | 'datetime'
-  | 'boolean'
-  | 'text';
 
 export interface ColumnType {
-  column_name: string;
-  detected_type: DataType;
-  original_dtype: string;
-  confidence: number;
-  unique_count?: number;
-  null_count?: number;
-  null_percentage?: number;
-  sample_values?: any[];
-  patterns?: string[];
-  statistics?: ColumnStatistics;
-  metadata?: Record<string, any>;
-}
-
-export interface ColumnStatistics {
-  mean?: number;
-  median?: number;
-  mode?: any;
-  std?: number;
-  min?: number | string;
-  max?: number | string;
-  q1?: number;
-  q3?: number;
-  skewness?: number;
-  kurtosis?: number;
-  variance?: number;
-  count: number;
+  detected_type: 'number' | 'text' | 'boolean' | 'datetime';
+  pandas_dtype: string;
   null_count: number;
   unique_count: number;
-  distribution?: Record<string, number>;
-  percentiles?: Record<string, number>;
 }
 
-// ============================================
+// Data Preview
+export interface DataPreview {
+  columns: string[];
+  rows: Record<string, any>[];
+  total_rows: number;
+  displayed_rows: number;
+}
+
 // Insights Types
 // ============================================
 
@@ -156,19 +123,23 @@ export type InsightType =
 
 export interface Insight {
   id: number;
-  dataset_id: number;
-  category: InsightCategory;
-  type: InsightType;
+  type: string;
+  category?: string;
   title: string;
   description: string;
   confidence: number;
-  importance: number;
+  importance?: number;
   column_name?: string;
   related_columns?: string[];
-  metadata: Record<string, unknown>;
-  visualization_config?: Record<string, unknown>;
-  actionable: boolean;
-  action_items?: string[];
+  metadata?: {
+    value?: any;
+    trend?: 'increasing' | 'decreasing' | 'stable';
+    correlation_value?: number;
+    outlier_indices?: number[];
+    pattern_type?: string;
+    visualization?: any;
+    [key: string]: any;
+  };
   created_at: string;
 }
 
@@ -300,6 +271,52 @@ export interface Recommendation {
   description: string;
   action?: string;
   benefit?: string;
+}
+
+// Dataset Analysis Response
+export interface DatasetAnalysis {
+  dataset_id: number;
+  row_count: number;
+  column_count: number;
+  columns: ColumnAnalysis[];
+  summary?: {
+    totalRows: number;
+    totalColumns: number;
+    fileSize: number;
+    status: string;
+    dataQuality?: string;
+  };
+  insights?: Array<{
+    type: 'info' | 'success' | 'warning' | 'error';
+    title: string;
+    description: string;
+  }>;
+  statistics?: {
+    numerical: Record<string, {
+      mean: number;
+      median: number;
+      std: number;
+      min: number;
+      max: number;
+      count: number;
+    }>;
+    categorical: Record<string, Record<string, number>>;
+  };
+  chartData?: {
+    rowDistribution: Array<{ name: string; value: number }>;
+    columnTypes?: Array<{ name: string; value: number }>;
+    dataQuality?: Array<{ name: string; completeness: number; missing: number }>;
+    topCategories?: Record<string, Array<{ name: string; value: number }>>;
+  };
+  preview?: Array<Record<string, unknown>>;
+  dataQuality?: {
+    score: string;
+    completeness: number;
+    uniqueness: number;
+    missingValues: number;
+    duplicates: number;
+    totalCells: number;
+  };
 }
 
 // ============================================

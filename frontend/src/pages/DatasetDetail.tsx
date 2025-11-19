@@ -52,19 +52,26 @@ const DatasetDetail: React.FC = () => {
       setLoading(true);
       const datasetId = parseInt(id!);
 
-      const [datasetRes, typesRes, insightsRes, previewRes] = await Promise.allSettled([
+      const [datasetRes, typesRes, previewRes] = await Promise.allSettled([
         api.getDataset(datasetId),
-        api.getColumnTypes(datasetId),
-        api.getInsights(datasetId),
+        api.detectTypes(datasetId),
         api.getDatasetPreview(datasetId, 100),
       ]);
+      
+      // Load insights separately
+      let insightsRes: any = { status: 'rejected' };
+      try {
+        insightsRes = { status: 'fulfilled', value: await api.getInsights(datasetId) };
+      } catch (error) {
+        insightsRes = { status: 'rejected', reason: error };
+      }
 
       if (datasetRes.status === 'fulfilled' && datasetRes.value.success) {
         setDataset(datasetRes.value.data!);
       }
 
       if (typesRes.status === 'fulfilled' && typesRes.value.success) {
-        setColumnTypes(typesRes.value.data!);
+        setColumnTypes(typesRes.value.data!.columns);
       }
 
       if (insightsRes.status === 'fulfilled' && insightsRes.value.success) {
@@ -78,6 +85,23 @@ const DatasetDetail: React.FC = () => {
       ErrorHandler.handle(error, 'Failed to load dataset');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateInsights = async () => {
+    if (!id) return;
+
+    try {
+      setProcessing((prev) => ({ ...prev, insights: true }));
+      const result = await api.getInsights(parseInt(id));
+      if (result.success && result.data) {
+        setInsights(result.data);
+        setActiveTab('insights');
+      }
+    } catch (error) {
+      ErrorHandler.handle(error, 'Failed to generate insights');
+    } finally {
+      setProcessing((prev) => ({ ...prev, insights: false }));
     }
   };
 
@@ -95,23 +119,6 @@ const DatasetDetail: React.FC = () => {
       ErrorHandler.handle(error, 'Failed to detect types');
     } finally {
       setProcessing((prev) => ({ ...prev, types: false }));
-    }
-  };
-
-  const handleGenerateInsights = async () => {
-    if (!id) return;
-
-    try {
-      setProcessing((prev) => ({ ...prev, insights: true }));
-      const result = await api.generateInsights(parseInt(id));
-      if (result.success && result.data) {
-        setInsights(result.data.insights);
-        setActiveTab('insights');
-      }
-    } catch (error) {
-      ErrorHandler.handle(error, 'Failed to generate insights');
-    } finally {
-      setProcessing((prev) => ({ ...prev, insights: false }));
     }
   };
 

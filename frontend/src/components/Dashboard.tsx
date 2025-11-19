@@ -1,6 +1,29 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../lib/api';
+import { 
+  Database, 
+  FileUp, 
+  BarChart3, 
+  LogOut, 
+  TrendingUp, 
+  Search,
+  Filter,
+  MoreVertical,
+  Download,
+  Trash2,
+  Eye,
+  Calendar,
+  FileText,
+  Upload,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Grid3x3,
+  List,
+  Layers
+} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import api from '@/lib/api';
 import { Dataset } from '../types/api.types';
 import { DashboardStats as Stats, ActivityItem, SortOption, ViewMode, FilterOption } from '../types/dashboard';
 import { DashboardStats } from './dashboard/DashboardStats';
@@ -9,14 +32,6 @@ import { QuickActions } from './dashboard/QuickActions';
 import { DatasetCard } from './dashboard/DatasetCard';
 import ErrorHandler from '../utils/errorHandler';
 import {
-  Upload,
-  Search,
-  Filter,
-  SortAsc,
-  SortDesc,
-  Grid,
-  List,
-  Layers,
   Loader2,
   AlertCircle,
   RefreshCw,
@@ -56,7 +71,11 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       const result = await api.getDatasets();
       
-      if (result.success && result.data) {
+      if (Array.isArray(result)) {
+        setDatasets(result);
+        calculateStats(result);
+        generateActivities(result);
+      } else if (result.success && result.data) {
         setDatasets(result.data);
         calculateStats(result.data);
         generateActivities(result.data);
@@ -74,13 +93,13 @@ const Dashboard: React.FC = () => {
 
     const stats: Stats = {
       totalDatasets: datasets.length,
-      totalRows: datasets.reduce((sum, d) => sum + d.row_count, 0),
-      totalColumns: datasets.reduce((sum, d) => sum + d.column_count, 0),
-      totalSize: datasets.reduce((sum, d) => sum + d.file_size, 0),
+      totalRows: datasets.reduce((sum, d) => sum + (d.row_count || 0), 0),
+      totalColumns: datasets.reduce((sum, d) => sum + (d.column_count || 0), 0),
+      totalSize: datasets.reduce((sum, d) => sum + (d.file_size || 0), 0),
       recentUploads: datasets.filter(d => new Date(d.created_at) > weekAgo).length,
-      analyzedDatasets: 0, // Would come from API
-      totalInsights: 0, // Would come from API
-      avgConfidence: 0, // Would come from API
+      analyzedDatasets: 0,
+      totalInsights: 0,
+      avgConfidence: 0,
     };
 
     setStats(stats);
@@ -109,9 +128,12 @@ const Dashboard: React.FC = () => {
 
     try {
       setUploading(true);
-      const result = await api.uploadDataset(file);
+      const formData = new FormData();
+      formData.append('file', file);
       
-      if (result.success) {
+      const result = await api.uploadDataset(formData);
+      
+      if (result.success || result) {
         setShowUploadModal(false);
         await loadDashboardData();
       }
@@ -138,15 +160,10 @@ const Dashboard: React.FC = () => {
   const handleExportDataset = async (id: number) => {
     try {
       const dataset = datasets.find(d => d.id === id);
-      const blob = await api.exportDataset(id, 'csv');
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${dataset?.name || 'dataset'}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      if (!dataset) return;
+      
+      // For now, just show a message - you'll need to implement export on backend
+      alert('Export functionality coming soon!');
     } catch (error) {
       ErrorHandler.handle(error, 'Failed to export dataset');
     }
@@ -168,16 +185,15 @@ const Dashboard: React.FC = () => {
     // Status filter
     switch (filterBy) {
       case 'analyzed':
-        // filtered = filtered.filter(d => d.analyzed); // Would need this field
         break;
       case 'unanalyzed':
-        // filtered = filtered.filter(d => !d.analyzed);
         break;
-      case 'recent':
+      case 'recent': {
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
         filtered = filtered.filter(d => new Date(d.created_at) > weekAgo);
         break;
+      }
     }
 
     // Sort
@@ -192,10 +208,10 @@ const Dashboard: React.FC = () => {
           comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
           break;
         case 'size':
-          comparison = a.file_size - b.file_size;
+          comparison = (a.file_size || 0) - (b.file_size || 0);
           break;
         case 'rows':
-          comparison = a.row_count - b.row_count;
+          comparison = (a.row_count || 0) - (b.row_count || 0);
           break;
       }
 
@@ -307,9 +323,9 @@ const Dashboard: React.FC = () => {
                   className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   {sortOrder === 'asc' ? (
-                    <SortAsc className="w-5 h-5 text-gray-600" />
+                    <ArrowUp className="w-5 h-5 text-gray-600" />
                   ) : (
-                    <SortDesc className="w-5 h-5 text-gray-600" />
+                    <ArrowDown className="w-5 h-5 text-gray-600" />
                   )}
                 </button>
 
@@ -323,7 +339,7 @@ const Dashboard: React.FC = () => {
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
-                    <Grid className="w-4 h-4" />
+                    <Grid3x3 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setViewMode('list')}

@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { ApiService } from '@/lib/api';
+import api from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
+import { Dataset } from '@/types/api.types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -8,24 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Upload, FileText, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from './Navbar';
-
-type Dataset = {
-  id: number;
-  name?: string;
-  description?: string;
-  originalFilename: string;
-  sizeBytes: number;
-  rowCount: number;
-  status: 'uploaded' | 'processing' | 'completed' | 'failed';
-  metadata?: {
-    headers?: string[];
-    preview?: Record<string, unknown>[];
-    analysis?: unknown;
-  };
-  createdAt: string;
-  updatedAt: string;
-  [key: string]: unknown;
-};
 
 type UploadedFile = {
   name: string;
@@ -55,19 +38,29 @@ const FileUpload: React.FC = () => {
   const pollDatasetUntilComplete = useCallback(async (datasetId: number, fileName: string) => {
     const maxAttempts = 30;
     let attempts = 0;
+    
     while (attempts < maxAttempts) {
-      const dsResp = await ApiService.getDataset(datasetId);
+      const dsResp = await api.getDataset(datasetId);
       const ds = dsResp?.data;
       
-      if (ds?.status === 'completed') return ds;
+      if (!ds) {
+        throw new Error('Failed to fetch dataset');
+      }
       
-      if (ds?.status === 'failed') {
-        throw new Error('Dataset processing failed');
+      // Check if dataset is ready (processing complete)
+      if (ds.status === 'ready') {
+        return ds;
+      }
+      
+      // Check if dataset processing failed
+      if (ds.status === 'error') {
+        throw new Error(ds.error_message || 'Dataset processing failed');
       }
       
       attempts++;
       await new Promise((r) => setTimeout(r, 1000));
     }
+    
     throw new Error('Analysis timed out');
   }, []);
 
@@ -88,9 +81,9 @@ const FileUpload: React.FC = () => {
 
       const formData = new FormData();
       formData.append('file', file);
-
-      const uploadResp = await ApiService.uploadDataset(formData);
+      const uploadResp = await api.uploadDataset(formData);
       const dataset = uploadResp?.data;
+      
       if (!dataset?.id) {
         throw new Error('Upload failed: missing dataset id in response');
       }
@@ -100,19 +93,23 @@ const FileUpload: React.FC = () => {
       const completed = await pollDatasetUntilComplete(dataset.id, fileName);
 
       setFiles((prev) => prev.map(f => f.name === fileName ? { ...f, status: 'completed', progress: 100 } : f));
-      setUploadedFiles((prev) => [completed, ...prev.filter(d => d.id !== completed.id)]);
+      
+      // Add to uploaded files list
+      setUploadedFiles((prev) => {
+        const filtered = prev.filter(d => d.id !== completed.id);
+        return [completed, ...filtered];
+      });
 
       toast({
         title: 'Analysis Complete',
         description: `${fileName} processed successfully.`,
       });
 
-      // Fixed: Navigate to analytics page with datasetId in the URL path
       setTimeout(() => {
         navigate(`/analytics/${completed.id}`, { 
           state: { 
             datasetId: completed.id, 
-            fileName,
+            fileName: completed.file_name,
             fromUpload: true 
           } 
         });
