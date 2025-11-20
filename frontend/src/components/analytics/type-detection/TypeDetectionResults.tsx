@@ -34,7 +34,7 @@ export const TypeDetectionResults: React.FC<TypeDetectionResultsProps> = ({
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [sortBy, setSortBy] = useState<'name' | 'confidence' | 'type'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'type'>('name');
 
   const stats = useMemo(() => calculateTypeDetectionStats(columnTypes), [columnTypes]);
 
@@ -59,8 +59,6 @@ export const TypeDetectionResults: React.FC<TypeDetectionResultsProps> = ({
       switch (sortBy) {
         case 'name':
           return nameA.localeCompare(nameB);
-        case 'confidence':
-          return typeB.confidence - typeA.confidence;
         case 'type':
           return typeA.detected_type.localeCompare(typeB.detected_type);
         default:
@@ -199,15 +197,12 @@ export const TypeDetectionResults: React.FC<TypeDetectionResultsProps> = ({
         {/* Sort */}
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as 'name' | 'confidence' | 'type')}
+          onChange={(e) => setSortBy(e.target.value as 'name' | 'type')}
           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="name">Sort by Name</option>
-          <option value="confidence">Sort by Confidence</option>
           <option value="type">Sort by Type</option>
         </select>
-
-        {/* View Mode */}
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('grid')}

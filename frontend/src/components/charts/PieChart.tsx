@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Chart as ChartJS, registerables } from 'chart.js';
+import { Chart as ChartJS, registerables, ChartConfiguration } from 'chart.js';
 import { ChartData, ChartOptions, CHART_COLOR_PALETTE } from '../../types/charts';
 
 ChartJS.register(...registerables);
@@ -52,7 +52,7 @@ export const PieChart: React.FC<PieChartProps> = ({
         responsive: true,
         maintainAspectRatio: false,
         ...options,
-      } as any,
+      } as ChartConfiguration['options'],
     });
 
     return () => {

@@ -20,6 +20,7 @@ import {
   BarChart3,
   Sparkles,
 } from 'lucide-react';
+import { DataVisualizations } from '../components/analytics/insights/visualizations/DataVisualizations';
 
 type TabType = 'overview' | 'preview' | 'types'|'visualizations'| 'insights' | 'statistics';
 
@@ -371,13 +372,32 @@ const DatasetDetail: React.FC = () => {
           </div>
         )}
 
-{activeTab === 'visualizations' && (
-  <EmptyState
-    icon={BarChart3}
-    title="Visualizations Coming Soon"
-    description="Data visualizations feature is under development"
-  />
-)}
+        {activeTab === 'visualizations' && (
+          <div>
+            {Object.keys(columnTypes).length > 0 && preview ? (
+              <DataVisualizations
+                dataset={dataset}
+                columnTypes={columnTypes}
+                previewData={preview.rows}
+              />
+            ) : (
+              <EmptyState
+                icon={BarChart3}
+                title="No Data Available for Visualization"
+                description="Please detect types first to generate visualizations"
+                action={
+                  <button
+                    onClick={handleDetectTypes}
+                    disabled={processing.types}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    {processing.types ? 'Detecting...' : 'Detect Types Now'}
+                  </button>
+                }
+              />
+            )}
+          </div>
+        )}
 
         {activeTab === 'insights' && (
           <div>

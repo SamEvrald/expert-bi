@@ -33,7 +33,7 @@ export class DashboardGenerationService {
         dashboardData.description || '',
         JSON.stringify(dashboardData.layout || []),
         JSON.stringify(dashboardData.globalFilters || [])
-      ]) as InsertResult;
+      ]) as unknown as InsertResult;
 
       return {
         id: result.insertId,

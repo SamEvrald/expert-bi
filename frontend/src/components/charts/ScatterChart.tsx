@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Chart as ChartJS, registerables } from 'chart.js';
+import { Chart as ChartJS, registerables, ChartConfiguration } from 'chart.js';
 import { ChartData, ChartOptions } from '../../types/charts';
 
 ChartJS.register(...registerables);
@@ -43,15 +43,17 @@ export const ScatterChart: React.FC<ScatterChartProps> = ({
       })),
     };
 
-    chartRef.current = new ChartJS(ctx, {
+    const config: ChartConfiguration<'scatter'> = {
       type: 'scatter',
-      data: scatterData as any,
+      data: scatterData,
       options: {
         responsive: true,
         maintainAspectRatio: false,
         ...options,
-      } as any,
-    });
+      },
+    };
+
+    chartRef.current = new ChartJS(ctx, config);
 
     return () => {
       if (chartRef.current) {

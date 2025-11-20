@@ -8,12 +8,12 @@ interface UseApiState<T> {
   error: ApiException | null;
 }
 
-interface UseApiReturn<T, Args extends any[]> extends UseApiState<T> {
+interface UseApiReturn<T, Args extends unknown[]> extends UseApiState<T> {
   execute: (...args: Args) => Promise<T | null>;
   reset: () => void;
 }
 
-export function useApi<T, Args extends any[]>(
+export function useApi<T, Args extends unknown[]>(
   apiFunction: (...args: Args) => Promise<T>,
   options?: {
     onSuccess?: (data: T) => void;

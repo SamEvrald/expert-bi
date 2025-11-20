@@ -26,7 +26,7 @@ import {
   Info
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { ApiService } from '@/lib/api';
+import ApiService from '@/lib/api';
 
 interface Column {
   name: string;
@@ -151,7 +151,7 @@ const DataCleaner: React.FC<DataCleanerProps> = ({ datasetId, onCleaningComplete
   const analyzeDataset = useCallback(async () => {
     setIsAnalyzing(true);
     try {
-      const response = await ApiService.getDatasetAnalysis(datasetId);
+      const response = await ApiService.getAnalyses(datasetId);
       if (response.success && response.data) {
         const analysisData = response.data;
         

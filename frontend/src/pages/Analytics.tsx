@@ -220,7 +220,7 @@ const Analytics = () => {
             return;
           }
 
-          const analysisResponse = await api.getDatasetAnalysis(datasetId);
+          const analysisResponse = await api.getAnalyses(datasetId);
           
           if (!analysisResponse.success || !analysisResponse.data) {
             throw new Error('Failed to fetch analysis');
@@ -230,11 +230,11 @@ const Analytics = () => {
           
           // Build summary from available data
           const summary = {
-            totalRows: analysisData.row_count || 0,
-            totalColumns: analysisData.column_count || 0,
+            totalRows: datasetData.row_count || 0,
+            totalColumns: analysisData.columns?.length || 0,
             fileSize: datasetData.file_size || 0,
             status: datasetData.status || 'ready',
-            dataQuality: analysisData.dataQuality?.score || 'Good'
+            dataQuality: (analysisData as any).dataQuality?.score || 'Good'
           };
 
           // Ensure columns are in the right format with proper type assertions
@@ -257,21 +257,21 @@ const Analytics = () => {
           });
 
           // Create default insights if not provided
-          const insights = analysisData.insights || [];
+          const insights = (analysisData as any).insights || [];
 
           // Transform the analysis data
           const transformedAnalysis: AnalysisResult = {
             summary,
             columns,
             insights,
-            statistics: analysisData.statistics || { numerical: {}, categorical: {} },
+            statistics: (analysisData as any).statistics || { numerical: {}, categorical: {} },
             chartData: {
-              rowDistribution: analysisData.chartData?.rowDistribution || [
+              rowDistribution: [
                 { name: 'Total Rows', value: summary.totalRows }
               ],
-              columnTypes: analysisData.chartData?.columnTypes || [],
-              dataQuality: analysisData.chartData?.dataQuality || [],
-              topCategories: analysisData.chartData?.topCategories || {}
+              columnTypes: [],
+              dataQuality: [],
+              topCategories: {}
             },
             preview: (analysisData.preview || []).map(row => {
               const cleanRow: Record<string, string | number | boolean | null> = {};
@@ -286,7 +286,7 @@ const Analytics = () => {
               }
               return cleanRow;
             }),
-            dataQuality: analysisData.dataQuality
+            dataQuality: (analysisData as any).dataQuality
           };
           
           console.log('Analysis data received:', transformedAnalysis);

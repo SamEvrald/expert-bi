@@ -21,8 +21,8 @@ export const InsightCard: React.FC<InsightCardProps> = ({
   isExpanded: controlledExpanded,
 }) => {
   const [isExpanded, setIsExpanded] = useState(controlledExpanded || false);
-  const categoryInfo = getCategoryInfo(insight.category);
-  const typeInfo = getTypeInfo(insight.type);
+  const categoryInfo = getCategoryInfo((insight.category || 'general') as any);
+  const typeInfo = getTypeInfo(insight.type as any);
   const importanceInfo = getImportanceLevel(insight.importance || 0.5);
 
   const trendValue = insight.metadata?.trend;
